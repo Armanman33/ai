@@ -1,0 +1,16 @@
+{
+  "name": "chikoja-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "چی‌کجا — سامانه مکان‌محور یافتن اشیای گمشده در شهر تهران",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "build:server": "npm --prefix server run build",
+    "build": "npm run build:client && npm run build:server",
+    "start": "npm --prefix server run start",
+    "seed": "npm --prefix server run seed",
+    "test:api": "npm --prefix server run test"
+  }
+}

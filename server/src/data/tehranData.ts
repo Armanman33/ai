@@ -1,0 +1,181 @@
+export interface TehranPlace {
+  id: string;
+  name: string;
+  district: string;
+  lat: number;
+  lng: number;
+  type: 'neighborhood' | 'square' | 'metro' | 'landmark';
+}
+
+export interface SafePointSeed {
+  id: string;
+  name: string;
+  type: 'metro' | 'partner';
+  area: string;
+  address: string;
+  lat: number;
+  lng: number;
+  hours: string;
+}
+
+export const TEHRAN_PLACES: TehranPlace[] = [
+  { id: 'vanak', name: 'میدان ونک', district: 'منطقه ۳', lat: 35.7575, lng: 51.4100, type: 'square' },
+  { id: 'tajrish', name: 'میدان تجریش', district: 'منطقه ۱', lat: 35.8044, lng: 51.4281, type: 'square' },
+  { id: 'enghelab', name: 'میدان انقلاب', district: 'منطقه ۶', lat: 35.7010, lng: 51.3912, type: 'square' },
+  { id: 'azadi', name: 'میدان آزادی', district: 'منطقه ۹', lat: 35.6997, lng: 51.3380, type: 'square' },
+  { id: 'valiasr', name: 'میدان ولیعصر', district: 'منطقه ۶', lat: 35.7117, lng: 51.4070, type: 'square' },
+  { id: 'teatr-shahr', name: 'تئاتر شهر (چهارراه ولیعصر)', district: 'منطقه ۶', lat: 35.7005, lng: 51.4055, type: 'metro' },
+  { id: 'ferdowsi', name: 'میدان فردوسی', district: 'منطقه ۶', lat: 35.7010, lng: 51.4184, type: 'square' },
+  { id: 'haft-tir', name: 'میدان هفت‌تیر', district: 'منطقه ۶', lat: 35.7168, lng: 51.4264, type: 'square' },
+  { id: 'sadeghieh', name: 'فلکه دوم صادقیه', district: 'منطقه ۲', lat: 35.7222, lng: 51.3358, type: 'square' },
+  { id: 'saadat-abad', name: 'سعادت‌آباد (میدان کاج)', district: 'منطقه ۲', lat: 35.7817, lng: 51.3749, type: 'neighborhood' },
+  { id: 'shahrak-gharb', name: 'شهرک غرب (میدان صنعت)', district: 'منطقه ۲', lat: 35.7582, lng: 51.3755, type: 'neighborhood' },
+  { id: 'punak', name: 'میدان پونک', district: 'منطقه ۵', lat: 35.7621, lng: 51.3324, type: 'square' },
+  { id: 'jordan', name: 'جردن (بلوار ناهید)', district: 'منطقه ۳', lat: 35.7689, lng: 51.4176, type: 'neighborhood' },
+  { id: 'mirdamad', name: 'بلوار میرداماد', district: 'منطقه ۳', lat: 35.7595, lng: 51.4342, type: 'metro' },
+  { id: 'shariati', name: 'خیابان شریعتی (قلهک)', district: 'منطقه ۳', lat: 35.7745, lng: 51.4430, type: 'metro' },
+  { id: 'pasdaran', name: 'پاسداران (چهارراه پاسداران)', district: 'منطقه ۳', lat: 35.7731, lng: 51.4666, type: 'neighborhood' },
+  { id: 'niavaran', name: 'میدان نیاوران', district: 'منطقه ۱', lat: 35.8172, lng: 51.4694, type: 'neighborhood' },
+  { id: 'zaferanieh', name: 'زعفرانیه', district: 'منطقه ۱', lat: 35.8058, lng: 51.4148, type: 'neighborhood' },
+  { id: 'gheytarieh', name: 'پارک قیطریه', district: 'منطقه ۱', lat: 35.7920, lng: 51.4480, type: 'landmark' },
+  { id: 'velenjak', name: 'ولنجک', district: 'منطقه ۱', lat: 35.8035, lng: 51.3992, type: 'neighborhood' },
+  { id: 'farmanieh', name: 'فرمانیه', district: 'منطقه ۱', lat: 35.7980, lng: 51.4648, type: 'neighborhood' },
+  { id: 'heravi', name: 'میدان هروی', district: 'منطقه ۴', lat: 35.7676, lng: 51.4793, type: 'square' },
+  { id: 'tehranpars', name: 'فلکه اول تهرانپارس', district: 'منطقه ۸', lat: 35.7294, lng: 51.5293, type: 'square' },
+  { id: 'narmak', name: 'میدان هفت‌حوض (نارمک)', district: 'منطقه ۸', lat: 35.7347, lng: 51.4906, type: 'square' },
+  { id: 'resalat', name: 'میدان رسالت', district: 'منطقه ۸', lat: 35.7393, lng: 51.4776, type: 'square' },
+  { id: 'seyyed-khandan', name: 'پل سیدخندان', district: 'منطقه ۷', lat: 35.7418, lng: 51.4485, type: 'landmark' },
+  { id: 'yousef-abad', name: 'یوسف‌آباد (میدان کلانتری)', district: 'منطقه ۶', lat: 35.7366, lng: 51.4048, type: 'neighborhood' },
+  { id: 'fatemi', name: 'میدان جهاد (فاطمی)', district: 'منطقه ۶', lat: 35.7204, lng: 51.4050, type: 'square' },
+  { id: 'keshavarz', name: 'بلوار کشاورز (پارک لاله)', district: 'منطقه ۶', lat: 35.7105, lng: 51.3924, type: 'landmark' },
+  { id: 'karimkhan', name: 'خیابان کریم‌خان زند', district: 'منطقه ۶', lat: 35.7115, lng: 51.4170, type: 'neighborhood' },
+  { id: 'abbas-abad', name: 'خیابان بهشتی (عباس‌آباد)', district: 'منطقه ۷', lat: 35.7299, lng: 51.4256, type: 'metro' },
+  { id: 'amir-abad', name: 'امیرآباد شمالی', district: 'منطقه ۶', lat: 35.7285, lng: 51.3879, type: 'neighborhood' },
+  { id: 'gisha', name: 'کوی نصر (گیشا)', district: 'منطقه ۲', lat: 35.7327, lng: 51.3752, type: 'neighborhood' },
+  { id: 'sattarkhan', name: 'خیابان ستارخان', district: 'منطقه ۲', lat: 35.7176, lng: 51.3638, type: 'neighborhood' },
+  { id: 'ekbatan', name: 'شهرک اکباتان', district: 'منطقه ۵', lat: 35.7073, lng: 51.3095, type: 'neighborhood' },
+  { id: 'chitgar', name: 'دریاچه چیتگر (شهدای خلیج فارس)', district: 'منطقه ۲۲', lat: 35.7460, lng: 51.2130, type: 'landmark' },
+  { id: 'mellat-park', name: 'پارک ملت', district: 'منطقه ۳', lat: 35.7785, lng: 51.4104, type: 'landmark' },
+  { id: 'saei-park', name: 'پارک ساعی', district: 'منطقه ۶', lat: 35.7359, lng: 51.4112, type: 'landmark' },
+  { id: 'tehran-uni', name: 'دانشگاه تهران', district: 'منطقه ۶', lat: 35.7026, lng: 51.3955, type: 'landmark' },
+  { id: 'sharif-uni', name: 'دانشگاه صنعتی شریف', district: 'منطقه ۲', lat: 35.7036, lng: 51.3515, type: 'landmark' },
+  { id: 'imam-khomeini', name: 'میدان امام خمینی (توپخانه)', district: 'منطقه ۱۲', lat: 35.6857, lng: 51.4216, type: 'metro' },
+  { id: 'bazaar', name: 'بازار بزرگ تهران (پانزده خرداد)', district: 'منطقه ۱۲', lat: 35.6788, lng: 51.4210, type: 'metro' },
+  { id: 'baharestan', name: 'میدان بهارستان', district: 'منطقه ۱۲', lat: 35.6915, lng: 51.4342, type: 'metro' },
+  { id: 'piroozi', name: 'خیابان پیروزی (نبرد)', district: 'منطقه ۱۴', lat: 35.6910, lng: 51.4718, type: 'neighborhood' },
+  { id: 'niroo-havayi', name: 'نیروهوایی (میدان مادر)', district: 'منطقه ۱۳', lat: 35.7042, lng: 51.4840, type: 'neighborhood' },
+  { id: 'rah-ahan', name: 'میدان راه‌آهن', district: 'منطقه ۱۱', lat: 35.6594, lng: 51.3976, type: 'metro' },
+  { id: 'nazi-abad', name: 'نازی‌آباد (میدان بهمنیار)', district: 'منطقه ۱۶', lat: 35.6418, lng: 51.4046, type: 'neighborhood' },
+  { id: 'shahr-rey', name: 'میدان شهرری', district: 'منطقه ۲۰', lat: 35.5935, lng: 51.4344, type: 'square' },
+  { id: 'mehrabad', name: 'فرودگاه مهرآباد', district: 'منطقه ۹', lat: 35.6892, lng: 51.3134, type: 'landmark' },
+  { id: 'jannat-abad', name: 'جنت‌آباد مرکزی', district: 'منطقه ۵', lat: 35.7580, lng: 51.3042, type: 'neighborhood' },
+  { id: 'marzdaran', name: 'بلوار مرزداران', district: 'منطقه ۲', lat: 35.7380, lng: 51.3526, type: 'neighborhood' },
+  { id: 'monirieh', name: 'میدان منیریه', district: 'منطقه ۱۱', lat: 35.6838, lng: 51.4027, type: 'metro' },
+  { id: 'harandi', name: 'میدان شوش', district: 'منطقه ۱۲', lat: 35.6579, lng: 51.4328, type: 'metro' },
+  { id: 'khorasan', name: 'میدان خراسان', district: 'منطقه ۱۲', lat: 35.6695, lng: 51.4480, type: 'square' },
+  { id: 'nobonyad', name: 'میدان نوبنیاد', district: 'منطقه ۱', lat: 35.7924, lng: 51.4888, type: 'metro' },
+  { id: 'sadr', name: 'ایستگاه مترو صدر', district: 'منطقه ۳', lat: 35.7860, lng: 51.4395, type: 'metro' },
+];
+
+export const SAFE_POINTS_SEED: SafePointSeed[] = [
+  {
+    id: 'sp-vanak',
+    name: 'نقطه امن ایستگاه مترو حقانی / محدوده ونک',
+    type: 'metro',
+    area: 'میدان ونک',
+    address: 'بزرگراه حقانی، جنب ایستگاه مترو شهید حقانی، باجه امانات چی‌کجا',
+    lat: 35.7568,
+    lng: 51.4211,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-tajrish',
+    name: 'نقطه امن ایستگاه مترو تجریش',
+    type: 'metro',
+    area: 'میدان تجریش',
+    address: 'میدان قدس، ورودی اصلی مترو تجریش، پیشخوان خدمات شهروندی',
+    lat: 35.8054,
+    lng: 51.4310,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-enghelab',
+    name: 'نقطه امن ایستگاه مترو میدان انقلاب',
+    type: 'metro',
+    area: 'میدان انقلاب',
+    address: 'میدان انقلاب اسلامی، سالن مرکزی مترو، بخش اشیای پیدا شده',
+    lat: 35.7012,
+    lng: 51.3914,
+    hours: 'همه‌روزه ۶:۳۰ تا ۲۱:۳۰',
+  },
+  {
+    id: 'sp-teatr-shahr',
+    name: 'نقطه امن ایستگاه مترو تئاتر شهر',
+    type: 'metro',
+    area: 'چهارراه ولیعصر',
+    address: 'چهارراه ولیعصر، ایستگاه مترو تئاتر شهر، دفتر پذیرش امن',
+    lat: 35.7003,
+    lng: 51.4058,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-sadeghieh',
+    name: 'نقطه امن ایستگاه مترو صادقیه',
+    type: 'metro',
+    area: 'صادقیه',
+    address: 'فلکه دوم صادقیه، ایستگاه مترو تهران (صادقیه)، باجه تحویل امن',
+    lat: 35.7166,
+    lng: 51.3292,
+    hours: 'همه‌روزه ۶:۳۰ تا ۲۱:۳۰',
+  },
+  {
+    id: 'sp-mirdamad',
+    name: 'نقطه امن ایستگاه مترو میرداماد',
+    type: 'metro',
+    area: 'میرداماد',
+    address: 'بلوار میرداماد، ایستگاه مترو میرداماد، واحد امانات',
+    lat: 35.7592,
+    lng: 51.4347,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-saadat-abad',
+    name: 'مرکز همکار امن سعادت‌آباد',
+    type: 'partner',
+    area: 'سعادت‌آباد',
+    address: 'میدان کاج، ساختمان خدمات الکترونیک شهر، باجه چی‌کجا',
+    lat: 35.7819,
+    lng: 51.3752,
+    hours: 'شنبه تا پنجشنبه ۸:۰۰ تا ۱۹:۰۰',
+  },
+  {
+    id: 'sp-tehranpars',
+    name: 'نقطه امن ایستگاه مترو تهرانپارس',
+    type: 'metro',
+    area: 'تهرانپارس',
+    address: 'بزرگراه رسالت، ایستگاه مترو تهرانپارس، باجه تحویل امن',
+    lat: 35.7351,
+    lng: 51.5290,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-rah-ahan',
+    name: 'نقطه امن ایستگاه مترو راه‌آهن',
+    type: 'metro',
+    area: 'میدان راه‌آهن',
+    address: 'میدان راه‌آهن، ورودی مترو راه‌آهن، دفتر اشیای پیدا شده',
+    lat: 35.6596,
+    lng: 51.3978,
+    hours: 'همه‌روزه ۷:۰۰ تا ۲۱:۰۰',
+  },
+  {
+    id: 'sp-imam-khomeini',
+    name: 'نقطه امن ایستگاه مترو امام خمینی',
+    type: 'metro',
+    area: 'میدان امام خمینی',
+    address: 'میدان امام خمینی، سالن تبادل خط ۱ و ۲، باجه امانات',
+    lat: 35.6857,
+    lng: 51.4216,
+    hours: 'همه‌روزه ۶:۳۰ تا ۲۱:۳۰',
+  },
+];
