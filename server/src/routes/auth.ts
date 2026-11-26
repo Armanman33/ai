@@ -13,6 +13,7 @@ import {
   safeEqual,
 } from '../utils/crypto.js';
 import { maskPhoneForSelf, normalizeIranPhone, toAsciiDigits } from '../utils/persian.js';
+import { logger } from '../utils/logger.js';
 import { createRateLimiter } from '../utils/rateLimit.js';
 
 export const authRouter = Router();
@@ -20,8 +21,16 @@ export const authRouter = Router();
 const otpRequestLimiter = createRateLimiter({
   keyPrefix: 'otp-req',
   windowMs: 5 * 60 * 1000,
-  max: 8,
+  max: 10,
   message: 'درخواست‌های ارسال کد تأیید بیش از حد مجاز است. لطفاً چند دقیقه صبر کنید.',
+});
+
+const otpRequestPhoneLimiter = createRateLimiter({
+  keyPrefix: 'otp-req-phone',
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  keyFn: (req) => normalizeIranPhone(String(req.body?.phone || '')) || req.ip || 'unknown',
+  message: 'تعداد درخواست کد تأیید برای این شماره بیش از حد مجاز است. لطفاً ۱۰ دقیقه صبر کنید.',
 });
 
 const otpVerifyLimiter = createRateLimiter({
@@ -31,25 +40,63 @@ const otpVerifyLimiter = createRateLimiter({
   message: 'تعداد تلاش‌های ورود بیش از حد مجاز است. لطفاً چند دقیقه بعد تلاش کنید.',
 });
 
+const otpVerifyPhoneLimiter = createRateLimiter({
+  keyPrefix: 'otp-verify-phone',
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  keyFn: (req) => normalizeIranPhone(String(req.body?.phone || '')) || req.ip || 'unknown',
+  message: 'تعداد تلاش‌های تأیید کد برای این شماره بیش از حد مجاز است. لطفاً کمی بعد تلاش کنید.',
+});
+
+const profileUpdateLimiter = createRateLimiter({
+  keyPrefix: 'profile-update',
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  keyFn: (req) => req.user?.id || req.ip || 'anon',
+  message: 'تعداد تغییرات پروفایل بیش از حد مجاز است.',
+});
+
 const requestOtpSchema = z.object({
   phone: z.string().min(10).max(20),
 });
 
-authRouter.post('/request-otp', otpRequestLimiter, async (req, res) => {
+authRouter.post('/request-otp', otpRequestLimiter, otpRequestPhoneLimiter, async (req, res) => {
   const parsed = requestOtpSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲۳۴۵۶۷۸۹' });
+    res.status(400).json({ ok: false, error: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲۳۴۵۶۷۸۹', code: 'INVALID_PHONE' });
     return;
   }
 
   const phone = normalizeIranPhone(parsed.data.phone);
   if (!phone) {
-    res.status(400).json({ error: 'لطفاً یک شماره موبایل معتبر ایران با شروع ۰۹ وارد کنید.' });
+    res.status(400).json({ ok: false, error: 'لطفاً یک شماره موبایل معتبر ایران با شروع ۰۹ وارد کنید.', code: 'INVALID_PHONE' });
     return;
   }
 
   const db = getDb();
   const now = new Date();
+
+  // Enforce cooldown between consecutive OTP requests for the same phone (anti-SMS-bombing)
+  if (CONFIG.OTP_COOLDOWN_SECONDS > 0) {
+    const latestOtp = db
+      .prepare(`SELECT created_at FROM otp_codes WHERE phone = ? ORDER BY created_at DESC LIMIT 1`)
+      .get(phone) as { created_at: string } | undefined;
+    if (latestOtp) {
+      const elapsedSec = (now.getTime() - new Date(latestOtp.created_at).getTime()) / 1000;
+      if (elapsedSec < CONFIG.OTP_COOLDOWN_SECONDS) {
+        const waitSec = Math.ceil(CONFIG.OTP_COOLDOWN_SECONDS - elapsedSec);
+        res.setHeader('Retry-After', String(waitSec));
+        res.status(429).json({
+          ok: false,
+          error: `لطفاً ${waitSec} ثانیه دیگر برای درخواست مجدد کد تأیید صبر کنید.`,
+          code: 'OTP_COOLDOWN',
+          retryAfterSec: waitSec,
+        });
+        return;
+      }
+    }
+  }
+
   const code = generateOtpCode();
   const codeHash = hashSecret(`otp:${phone}:${code}`);
 
@@ -66,7 +113,12 @@ authRouter.post('/request-otp', otpRequestLimiter, async (req, res) => {
 
   const smsRes = await sendOtpSms(phone, code);
   if (!smsRes.sent) {
-    res.status(502).json({ error: 'ارسال پیامک کد تأیید با خطا مواجه شد. لطفاً دوباره تلاش کنید.' });
+    logger.warn('otp_sms_send_failed', { phoneMasked: maskPhoneForSelf(phone) });
+    res.status(502).json({
+      ok: false,
+      error: 'ارسال پیامک کد تأیید با خطا مواجه شد. لطفاً دوباره تلاش کنید.',
+      code: 'SMS_DELIVERY_FAILED',
+    });
     return;
   }
 
@@ -75,7 +127,7 @@ authRouter.post('/request-otp', otpRequestLimiter, async (req, res) => {
     phoneMasked: maskPhoneForSelf(phone),
     expiresInSeconds: CONFIG.OTP_EXPIRY_MINUTES * 60,
     provider: smsRes.provider,
-    // Only provided in sandbox SMS mode so users can test without an external Iranian SMS gateway key
+    // Only provided in sandbox SMS mode (never in production unless explicitly opted in)
     ...(smsRes.sandboxCode ? { sandboxCode: smsRes.sandboxCode } : {}),
   });
 });
@@ -86,7 +138,7 @@ const verifyOtpSchema = z.object({
   displayName: z.string().trim().min(2).max(60).optional(),
 });
 
-authRouter.post('/verify-otp', otpVerifyLimiter, (req, res) => {
+authRouter.post('/verify-otp', otpVerifyLimiter, otpVerifyPhoneLimiter, (req, res) => {
   const parsed = verifyOtpSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'اطلاعات ورود ناقص است.' });
@@ -294,7 +346,7 @@ const updateProfileSchema = z.object({
   notificationsEnabled: z.boolean().optional(),
 });
 
-authRouter.patch('/profile', requireAuth, (req, res) => {
+authRouter.patch('/profile', requireAuth, profileUpdateLimiter, (req, res) => {
   const parsed = updateProfileSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message || 'اطلاعات نامعتبر است.' });
@@ -345,6 +397,13 @@ authRouter.post('/logout', requireAuth, (req, res) => {
   if (req.sessionTokenHash) {
     db.prepare(`DELETE FROM sessions WHERE token_hash = ?`).run(req.sessionTokenHash);
   }
-  res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
+    partitioned: isHttps,
+    path: '/',
+  });
   res.json({ ok: true });
 });

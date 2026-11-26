@@ -148,8 +148,10 @@ export function runLifecycleSweep(): {
     });
   }
 
-  // Clean up expired sessions & old OTP codes
-  db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).run(nowIso());
+  // Clean up expired sessions & stale OTP codes (> 24h old)
+  const cutoffOtpIso = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).run(nowStr);
+  db.prepare(`DELETE FROM otp_codes WHERE expires_at <= ? OR created_at <= ?`).run(cutoffOtpIso, cutoffOtpIso);
 
   return {
     expiredItems: toExpireItems.length,

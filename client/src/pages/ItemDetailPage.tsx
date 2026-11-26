@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { apiFetch, ApiError } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ItemDetail } from '../types';
@@ -31,6 +32,21 @@ export const ItemDetailPage: React.FC = () => {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isPublicIndexable = Boolean(
+    item && item.status === 'active' && !item.isDemo && !item.isSensitive
+  );
+
+  usePageSeo({
+    title: isPublicIndexable && item
+      ? `${item.title} — محدوده ${item.areaName} تهران | چی‌کجا`
+      : 'بررسی و اثبات مالکیت آگهی | چی‌کجا',
+    description: isPublicIndexable && item
+      ? `شیء پیدا‌شده در دسته «${item.categoryLabel}» در محدوده ${item.areaName} تهران. برای اثبات مالکیت در چی‌کجا به ۳ پرسش محرمانه پاسخ دهید.`
+      : 'بررسی و اثبات مالکیت شیء پیدا‌شده در تهران با ۳ پرسش محرمانه در سامانه امن چی‌کجا.',
+    canonicalPath: id ? `/items/${id}` : undefined,
+    robots: isPublicIndexable ? 'index, follow' : 'noindex, nofollow, noarchive',
+  });
 
   const [answers, setAnswers] = useState<[string, string, string]>(['', '', '']);
   const [submitting, setSubmitting] = useState(false);
@@ -178,7 +194,8 @@ export const ItemDetailPage: React.FC = () => {
         <div className="relative aspect-[16/10] sm:aspect-[21/9] bg-neutral-100">
           <img
             src={item.imageUrl}
-            alt={item.title}
+            alt={`تصویر ${item.imageIsBlurred ? 'محو‌شده ' : ''}${item.title} در محدوده ${item.areaName} تهران`}
+            decoding="async"
             className="w-full h-full object-cover"
           />
           {item.imageIsBlurred && (

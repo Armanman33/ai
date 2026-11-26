@@ -16,9 +16,40 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toPersianDigits } from '../lib/persian';
+import { usePageSeo } from '../lib/seo';
+
+const HOME_FAQS = [
+  {
+    q: 'چی‌کجا در چه شهرهایی فعال است؟',
+    a: 'سامانه چی‌کجا به‌صورت تخصصی و مکان‌محور برای محدوده شهر تهران طراحی شده است و محله‌ها، میادین و ایستگاه‌های متروی تهران را پوشش می‌دهد.',
+  },
+  {
+    q: 'چگونه از تحویل شیء به مالک واقعی اطمینان حاصل می‌شود؟',
+    a: 'یابنده هنگام ثبت شیء دقیقاً ۳ پرسش محرمانه با پاسخ مخفی تعریف می‌کند. تصاویر پیش از تأیید به‌صورت تار نمایش داده می‌شوند و هر کاربر حداکثر ۳ فرصت پاسخ‌گویی روی هر آگهی دارد.',
+  },
+  {
+    q: 'آیا شماره تماس یا نشانی منزل من به کاربر مقابل نمایش داده می‌شود؟',
+    a: 'خیر. شماره موبایل فقط برای ورود و اطلاع‌رسانی استفاده می‌شود و هرگز برای کاربر مقابل نمایش داده نمی‌شود. هماهنگی فقط در گفت‌وگوی داخلی انجام می‌شود و ارسال شماره تماس در چت مسدود است.',
+  },
+  {
+    q: 'روش‌های تحویل امن در چی‌کجا چیست؟',
+    a: 'فقط دو روش «ارسال با پیک» (با هزینه گم‌کننده و نشانی محرمانه صرفاً برای پیک مجاز) و «تحویل به نقطه امن» پشتیبانی می‌شود. تحویل مدارک شناسایی و کارت بانکی منحصراً در نقاط امن انجام می‌گیرد و قرار حضوری وجود ندارد.',
+  },
+  {
+    q: 'مدت اعتبار آگهی‌ها و هشدارهای گم‌شدن چقدر است؟',
+    a: 'آگهی اشیای پیدا‌شده ۳ روز و هشدار اشیای گمشده ۵ روز اعتبار دارد. پیش از انقضا اعلان ارسال می‌شود و پس از انقضا نیز امکان ثبت مجدد وجود دارد.',
+  },
+];
 
 export const HomePage: React.FC = () => {
-  const { user, counts } = useAuth();
+  const { user, meta, counts } = useAuth();
+
+  usePageSeo({
+    title: 'چی‌کجا | سامانه اشیای گمشده و پیدا‌شده شهر تهران',
+    description:
+      'چی‌کجا سامانه مکان‌محور و امن یافتن اشیای گمشده و ثبت وسایل پیدا‌شده در تهران است؛ بدون افشای شماره تماس، با احراز مالکیت ۳ پرسشی و تحویل امن با پیک یا نقطه امن.',
+    canonicalPath: '/',
+  });
 
   const quickSections = [
     {
@@ -207,6 +238,44 @@ export const HomePage: React.FC = () => {
           <p className="text-xs text-neutral-600 mt-1 leading-6">
             تحویل فقط با کد یک‌بارمصرف و رسید دیجیتال انجام می‌شود؛ مدارک صرفاً در نقطه امن.
           </p>
+        </div>
+      </section>
+
+      {/* Tehran Public Categories Quick Browse */}
+      {meta && meta.categories.length > 0 && (
+        <section className="bg-white rounded-2xl border border-neutral-200/80 p-4 sm:p-5 space-y-3">
+          <h2 className="text-sm sm:text-base font-extrabold text-[#0A0A0A]">
+            دسته‌بندی اشیای گمشده و پیدا‌شده در تهران
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {meta.categories.map((cat) => (
+              <Link
+                key={cat.id}
+                to={`/category/${cat.slug}`}
+                className="text-xs font-bold bg-neutral-100 hover:bg-[#FACC15] text-[#0A0A0A] px-3.5 py-2 rounded-xl transition-colors"
+              >
+                {cat.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Helpful FAQ (matches FAQPage Schema.org 1:1) */}
+      <section className="bg-white rounded-2xl border border-neutral-200/80 p-4 sm:p-5 space-y-3">
+        <h2 className="text-sm sm:text-base font-extrabold text-[#0A0A0A]">
+          پرسش‌های متداول درباره چی‌کجا
+        </h2>
+        <div className="divide-y divide-neutral-100">
+          {HOME_FAQS.map((item) => (
+            <details key={item.q} className="py-3 group">
+              <summary className="text-xs sm:text-sm font-bold text-[#0A0A0A] cursor-pointer list-none flex items-center justify-between gap-2">
+                <span>{item.q}</span>
+                <ChevronLeft className="w-4 h-4 text-neutral-400 shrink-0 transition-transform group-open:-rotate-90" />
+              </summary>
+              <p className="text-xs text-neutral-600 leading-6 mt-2">{item.a}</p>
+            </details>
+          ))}
         </div>
       </section>
     </div>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search,
   MapPin,
@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { ItemCategory, SearchItem } from '../types';
 import { TehranMap } from '../components/TehranMap';
 import { ItemCard } from '../components/ItemCard';
@@ -30,22 +31,33 @@ export const LostFlowPage: React.FC = () => {
   const { meta, user, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  usePageSeo({
+    title: 'گم کرده‌ام | جست‌وجوی اشیای گمشده در تهران — چی‌کجا',
+    description:
+      'اشیای پیدا‌شده در محله‌ها و ایستگاه‌های متروی تهران را روی نقشه جست‌وجو کنید یا هشدار ۵ روزه ثبت نمایید. احراز مالکیت با ۳ پرسش محرمانه در چی‌کجا.',
+    canonicalPath: '/lost',
+  });
 
   const dateOptions = getRecentDateOptions();
 
-  // Step 1 state: Location & Time in Tehran
-  const [step, setStep] = useState<1 | 2>(1);
+  const initialQuery = searchParams.get('q') || '';
+  const initialCategory = (searchParams.get('category') as ItemCategory | null) || '';
+
+  // Step 1 state: Location & Time in Tehran (jump straight to step 2 if linked with ?q= or ?category=)
+  const [step, setStep] = useState<1 | 2>(initialQuery || initialCategory ? 2 : 1);
   const [lat, setLat] = useState(35.7575); // Vanak Sq default
   const [lng, setLng] = useState(51.4100);
   const [areaName, setAreaName] = useState('میدان ونک');
-  const [radiusMeters, setRadiusMeters] = useState(3000);
+  const [radiusMeters, setRadiusMeters] = useState(initialQuery || initialCategory ? 10000 : 3000);
   const [lostDate, setLostDate] = useState(dateOptions[0].value);
   const [timeSlot, setTimeSlot] = useState<'all_day' | 'morning' | 'noon' | 'evening' | 'night'>('all_day');
   const [useTimeFilter, setUseTimeFilter] = useState(false);
 
   // Step 2 state: Search & Alert creation
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<ItemCategory | ''>('');
+  const [query, setQuery] = useState(initialQuery);
+  const [category, setCategory] = useState<ItemCategory | ''>(initialCategory);
   const [items, setItems] = useState<SearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

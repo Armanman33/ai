@@ -30,8 +30,11 @@ export const ItemCard: React.FC<{ item: SearchItem }> = ({ item }) => {
         <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-neutral-100 shrink-0 border border-neutral-200">
           <img
             src={item.imageUrl}
-            alt={item.title}
+            alt={`تصویر ${item.imageIsBlurred ? 'محو‌شده ' : ''}${item.title} در محدوده ${item.areaName} تهران`}
             loading="lazy"
+            decoding="async"
+            width={112}
+            height={112}
             className="w-full h-full object-cover"
           />
           {item.imageIsBlurred && (

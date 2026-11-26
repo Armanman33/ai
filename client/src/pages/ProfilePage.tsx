@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { BlockedUser } from '../types';
@@ -19,6 +20,13 @@ export const ProfilePage: React.FC = () => {
   const { user, loading: authLoading, updateProfile, enableNotifications, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'پروفایل و تنظیمات امنیتی | چی‌کجا',
+    description: 'مدیریت حساب کاربری، اعلان‌ها و کاربران مسدودشده در سامانه چی‌کجا.',
+    canonicalPath: '/profile',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [displayName, setDisplayName] = useState('');
   const [savingName, setSavingName] = useState(false);

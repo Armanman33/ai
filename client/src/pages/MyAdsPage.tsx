@@ -12,6 +12,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { MyFoundItem } from '../types';
@@ -29,6 +30,13 @@ export const MyAdsPage: React.FC = () => {
   const { user, loading: authLoading, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'آگهی‌های ثبت‌شده من | چی‌کجا',
+    description: 'مدیریت آگهی‌های اشیای پیدا‌شده در حساب کاربری چی‌کجا.',
+    canonicalPath: '/my-ads',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [items, setItems] = useState<MyFoundItem[]>([]);
   const [loading, setLoading] = useState(true);

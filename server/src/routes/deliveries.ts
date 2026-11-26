@@ -14,8 +14,26 @@ import {
   safeEqual,
 } from '../utils/crypto.js';
 import { toAsciiDigits } from '../utils/persian.js';
+import { createRateLimiter } from '../utils/rateLimit.js';
 
 export const deliveriesRouter = Router();
+
+// Strict brute-force guard for 6-digit one-time handover/pickup codes
+const deliveryCodeLimiter = createRateLimiter({
+  keyPrefix: 'delivery-code',
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  keyFn: (req) => `${req.user?.id || req.ip}:${String(req.params.claimId || '')}`,
+  message: 'تعداد تلاش‌های ورود کد یک‌بارمصرف بیش از حد مجاز است. لطفاً ۱۵ دقیقه بعد تلاش کنید.',
+});
+
+const deliveryMutationLimiter = createRateLimiter({
+  keyPrefix: 'delivery-mutation',
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  keyFn: (req) => req.user?.id || req.ip || 'anon',
+  message: 'تعداد درخواست‌های تغییر وضعیت تحویل بیش از حد مجاز است.',
+});
 
 interface DeliveryContext {
   deliveryId: string;
@@ -59,6 +77,16 @@ function getDeliveryContext(claimId: string, userId: string): { ctx?: DeliveryCo
   if (row.claimStatus !== 'verified') {
     return { error: 'تحویل فقط پس از تأیید مالکیت امکان‌پذیر است.', status: 403 };
   }
+  const peerId = row.finderId === userId ? row.loserId : row.finderId;
+  const blocked = db
+    .prepare(`
+      SELECT 1 FROM user_blocks
+      WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+    `)
+    .get(userId, peerId, peerId, userId);
+  if (blocked) {
+    return { error: 'به دلیل مسدودسازی، امکان تغییر وضعیت تحویل وجود ندارد.', status: 403 };
+  }
   return { ctx: row };
 }
 
@@ -74,7 +102,7 @@ const requestCourierSchema = z.object({
   }),
 });
 
-deliveriesRouter.post('/:claimId/request-courier', requireAuth, (req, res) => {
+deliveriesRouter.post('/:claimId/request-courier', requireAuth, deliveryMutationLimiter, (req, res) => {
   const resCtx = getDeliveryContext(String(req.params.claimId), req.user!.id);
   if (!resCtx.ctx) {
     res.status(resCtx.status || 400).json({ error: resCtx.error });
@@ -178,7 +206,7 @@ const verifyCodeSchema = z.object({
   operatorName: z.string().trim().min(2).max(80).optional(),
 });
 
-deliveriesRouter.post('/:claimId/confirm-courier-handover', requireAuth, (req, res) => {
+deliveriesRouter.post('/:claimId/confirm-courier-handover', requireAuth, deliveryCodeLimiter, (req, res) => {
   const resCtx = getDeliveryContext(String(req.params.claimId), req.user!.id);
   if (!resCtx.ctx) {
     res.status(resCtx.status || 400).json({ error: resCtx.error });
@@ -272,7 +300,7 @@ const selectSafePointSchema = z.object({
   safePointId: z.string().min(2),
 });
 
-deliveriesRouter.post('/:claimId/select-safe-point', requireAuth, (req, res) => {
+deliveriesRouter.post('/:claimId/select-safe-point', requireAuth, deliveryMutationLimiter, (req, res) => {
   const resCtx = getDeliveryContext(String(req.params.claimId), req.user!.id);
   if (!resCtx.ctx) {
     res.status(resCtx.status || 400).json({ error: resCtx.error });
@@ -345,7 +373,7 @@ deliveriesRouter.post('/:claimId/select-safe-point', requireAuth, (req, res) => 
 /**
  * Step B (Safe Point): Safe Point intake confirmation (records operator receipt with one-time drop-off code)
  */
-deliveriesRouter.post('/:claimId/confirm-safe-point-dropoff', requireAuth, (req, res) => {
+deliveriesRouter.post('/:claimId/confirm-safe-point-dropoff', requireAuth, deliveryCodeLimiter, (req, res) => {
   const resCtx = getDeliveryContext(String(req.params.claimId), req.user!.id);
   if (!resCtx.ctx) {
     res.status(resCtx.status || 400).json({ error: resCtx.error });
@@ -438,7 +466,7 @@ deliveriesRouter.post('/:claimId/confirm-safe-point-dropoff', requireAuth, (req,
  * Final Step (Courier OR Safe Point): Loser confirms final receipt using their cryptographic one-time pickup code.
  * Issues final immutable Digital Receipt visible to both parties.
  */
-deliveriesRouter.post('/:claimId/confirm-delivery', requireAuth, (req, res) => {
+deliveriesRouter.post('/:claimId/confirm-delivery', requireAuth, deliveryCodeLimiter, (req, res) => {
   const resCtx = getDeliveryContext(String(req.params.claimId), req.user!.id);
   if (!resCtx.ctx) {
     res.status(resCtx.status || 400).json({ error: resCtx.error });

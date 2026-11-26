@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { CATEGORY_MAP, CONFIG, ItemCategory } from '../config.js';
-import { getDb, nowIso } from '../db/database.js';
+import { getDb, nowIso, runInTransaction } from '../db/database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendFinderClaimAlertSms } from '../providers/sms.js';
 import { getAuditLogs, logStatusChange } from '../services/auditService.js';
@@ -174,186 +174,195 @@ claimsRouter.post('/', requireAuth, claimSubmitLimiter, async (req, res) => {
 
   const { itemId, answers } = parsed.data;
   const loserId = req.user!.id;
-  const db = getDb();
   const nowStr = nowIso();
 
-  const item = db
-    .prepare(`
-      SELECT fi.id, fi.finder_id, fi.title, fi.category, fi.delivery_method, fi.safe_point_id, fi.status, u.phone AS finder_phone
-      FROM found_items fi
-      JOIN users u ON u.id = fi.finder_id
-      WHERE fi.id = ?
-    `)
-    .get(itemId) as
-    | {
-        id: string;
-        finder_id: string;
-        title: string;
-        category: ItemCategory;
-        delivery_method: 'courier' | 'safe_point';
-        safe_point_id: string | null;
-        status: string;
-        finder_phone: string;
-      }
-    | undefined;
+  type ClaimOutcome =
+    | { status: number; body: Record<string, unknown>; sms?: { phone: string; title: string } };
 
-  if (!item) {
-    res.status(404).json({ error: 'آگهی موردنظر یافت نشد.' });
-    return;
-  }
-  if (item.finder_id === loserId) {
-    res.status(400).json({ error: 'امکان ثبت درخواست مالکیت روی آگهی خودتان وجود ندارد.' });
-    return;
-  }
+  const outcome = runInTransaction<ClaimOutcome>((db) => {
+    const item = db
+      .prepare(`
+        SELECT fi.id, fi.finder_id, fi.title, fi.category, fi.delivery_method, fi.safe_point_id, fi.status, u.phone AS finder_phone
+        FROM found_items fi
+        JOIN users u ON u.id = fi.finder_id
+        WHERE fi.id = ?
+      `)
+      .get(itemId) as
+      | {
+          id: string;
+          finder_id: string;
+          title: string;
+          category: ItemCategory;
+          delivery_method: 'courier' | 'safe_point';
+          safe_point_id: string | null;
+          status: string;
+          finder_phone: string;
+        }
+      | undefined;
 
-  // Enforce user-to-user block
-  const blocked = db
-    .prepare(`
-      SELECT 1 FROM user_blocks
-      WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
-    `)
-    .get(loserId, item.finder_id, item.finder_id, loserId);
-  if (blocked) {
-    res.status(403).json({ error: 'امکان ارسال درخواست برای این آگهی وجود ندارد.' });
-    return;
-  }
+    if (!item) {
+      return { status: 404, body: { error: 'آگهی موردنظر یافت نشد.' } };
+    }
+    if (item.finder_id === loserId) {
+      return { status: 400, body: { error: 'امکان ثبت درخواست مالکیت روی آگهی خودتان وجود ندارد.' } };
+    }
 
-  // Check if user already verified on this item
-  const existingVerified = db
-    .prepare(`SELECT id FROM ownership_claims WHERE item_id = ? AND loser_id = ? AND status = 'verified' LIMIT 1`)
-    .get(itemId, loserId) as { id: string } | undefined;
-  if (existingVerified) {
-    res.json({ verified: true, claimId: existingVerified.id, alreadyVerified: true });
-    return;
-  }
+    // Enforce user-to-user block
+    const blocked = db
+      .prepare(`
+        SELECT 1 FROM user_blocks
+        WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+      `)
+      .get(loserId, item.finder_id, item.finder_id, loserId);
+    if (blocked) {
+      return { status: 403, body: { error: 'امکان ارسال درخواست برای این آگهی وجود ندارد.' } };
+    }
 
-  // STRICT SERVER-SIDE 3-STRIKE LOCKOUT CHECK (never resettable by refresh/re-login)
-  const attemptRow = db
-    .prepare(`SELECT id, failed_attempts, permanently_blocked FROM ownership_attempts WHERE user_id = ? AND item_id = ?`)
-    .get(loserId, itemId) as
-    | { id: string; failed_attempts: number; permanently_blocked: number }
-    | undefined;
+    // Check if user already verified on this item
+    const existingVerified = db
+      .prepare(`SELECT id FROM ownership_claims WHERE item_id = ? AND loser_id = ? AND status = 'verified' LIMIT 1`)
+      .get(itemId, loserId) as { id: string } | undefined;
+    if (existingVerified) {
+      return { status: 200, body: { verified: true, claimId: existingVerified.id, alreadyVerified: true } };
+    }
 
-  if (attemptRow && (attemptRow.permanently_blocked === 1 || attemptRow.failed_attempts >= CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS)) {
-    res.status(403).json({
-      error: 'دسترسی شما به این آگهی به دلیل ۳ بار پاسخ اشتباه برای همیشه بسته شده است.',
-      permanentlyBlocked: true,
-      failedAttempts: attemptRow.failed_attempts,
-      remainingAttempts: 0,
-    });
-    return;
-  }
+    // STRICT SERVER-SIDE 3-STRIKE LOCKOUT CHECK (atomic inside BEGIN IMMEDIATE transaction)
+    const attemptRow = db
+      .prepare(`SELECT id, failed_attempts, permanently_blocked FROM ownership_attempts WHERE user_id = ? AND item_id = ?`)
+      .get(loserId, itemId) as
+      | { id: string; failed_attempts: number; permanently_blocked: number }
+      | undefined;
 
-  if (item.status !== 'active') {
-    res.status(400).json({ error: 'این آگهی دیگر فعال نیست و امکان بررسی مالکیت برای آن وجود ندارد.' });
-    return;
-  }
+    if (attemptRow && (attemptRow.permanently_blocked === 1 || attemptRow.failed_attempts >= CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS)) {
+      return {
+        status: 403,
+        body: {
+          error: 'دسترسی شما به این آگهی به دلیل ۳ بار پاسخ اشتباه برای همیشه بسته شده است.',
+          permanentlyBlocked: true,
+          failedAttempts: attemptRow.failed_attempts,
+          remainingAttempts: 0,
+        },
+      };
+    }
 
-  // Fetch the 3 secret questions & expected answers
-  const questions = db
-    .prepare(`SELECT question_index, question_text, answer_normalized FROM item_questions WHERE item_id = ? ORDER BY question_index ASC`)
-    .all(itemId) as { question_index: number; question_text: string; answer_normalized: string }[];
+    if (item.status !== 'active') {
+      return { status: 400, body: { error: 'این آگهی دیگر فعال نیست و امکان بررسی مالکیت برای آن وجود ندارد.' } };
+    }
 
-  if (questions.length !== 3) {
-    res.status(500).json({ error: 'پرسش‌های امنیتی این آگهی کامل نیست.' });
-    return;
-  }
+    const questions = db
+      .prepare(`SELECT question_index, question_text, answer_normalized FROM item_questions WHERE item_id = ? ORDER BY question_index ASC`)
+      .all(itemId) as { question_index: number; question_text: string; answer_normalized: string }[];
 
-  // Evaluate all 3 answers (all 3 MUST be correct)
-  const allCorrect = questions.every((q, idx) => doesAnswerMatch(answers[idx], q.answer_normalized));
-  const currentAttemptNum = (attemptRow?.failed_attempts || 0) + 1;
+    if (questions.length !== 3) {
+      return { status: 500, body: { error: 'پرسش‌های امنیتی این آگهی کامل نیست.' } };
+    }
 
-  // Record claim attempt in ownership_claims
-  const claimId = generateId();
-  db.prepare(`
-    INSERT INTO ownership_claims (
-      id, item_id, loser_id, finder_id, status, answers_json, attempt_number, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    claimId,
-    itemId,
-    loserId,
-    item.finder_id,
-    allCorrect ? 'verified' : 'rejected',
-    JSON.stringify(answers),
-    currentAttemptNum,
-    nowStr,
-    nowStr
-  );
+    const allCorrect = questions.every((q, idx) => doesAnswerMatch(answers[idx], q.answer_normalized));
+    const currentAttemptNum = (attemptRow?.failed_attempts || 0) + 1;
 
-  // Notify finder in-app + via SMS (Requirement section 8!)
-  createNotification({
-    userId: item.finder_id,
-    type: 'claim_received',
-    title: 'دریافت درخواست جدید روی آگهی شما',
-    body: `یک کاربر برای اثبات مالکیت «${item.title}» به ۳ پرسش محرمانه پاسخ داد.`,
-    linkPath: '/requests',
-    metadata: { claimId, itemId },
-  });
-  await sendFinderClaimAlertSms(item.finder_phone, item.title);
-
-  if (allCorrect) {
-    const deliveryId = initializeVerifiedClaim({
+    const claimId = generateId();
+    db.prepare(`
+      INSERT INTO ownership_claims (
+        id, item_id, loser_id, finder_id, status, answers_json, attempt_number, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       claimId,
       itemId,
       loserId,
-      finderId: item.finder_id,
-      itemTitle: item.title,
-      deliveryMethod: item.delivery_method,
-      safePointId: item.safe_point_id,
-      verifiedBy: 'auto',
+      item.finder_id,
+      allCorrect ? 'verified' : 'rejected',
+      JSON.stringify(answers),
+      currentAttemptNum,
+      nowStr,
+      nowStr
+    );
+
+    createNotification({
+      userId: item.finder_id,
+      type: 'claim_received',
+      title: 'دریافت درخواست جدید روی آگهی شما',
+      body: `یک کاربر برای اثبات مالکیت «${item.title}» به ۳ پرسش محرمانه پاسخ داد.`,
+      linkPath: '/requests',
+      metadata: { claimId, itemId },
+    });
+
+    if (allCorrect) {
+      const deliveryId = initializeVerifiedClaim({
+        claimId,
+        itemId,
+        loserId,
+        finderId: item.finder_id,
+        itemTitle: item.title,
+        deliveryMethod: item.delivery_method,
+        safePointId: item.safe_point_id,
+        verifiedBy: 'auto',
+        actorId: loserId,
+        actorRole: 'loser',
+      });
+
+      return {
+        status: 200,
+        body: {
+          verified: true,
+          claimId,
+          deliveryId,
+          message: 'مالکیت شما با موفقیت تأیید شد! اکنون می‌توانید گفت‌وگو و هماهنگی تحویل را آغاز کنید.',
+        },
+        sms: { phone: item.finder_phone, title: item.title },
+      };
+    }
+
+    // Incorrect attempt -> atomically persist strike in ownership_attempts
+    const newFailedAttempts = (attemptRow?.failed_attempts || 0) + 1;
+    const isNowBlocked = newFailedAttempts >= CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS ? 1 : 0;
+
+    if (attemptRow) {
+      db.prepare(`
+        UPDATE ownership_attempts
+        SET failed_attempts = ?, permanently_blocked = ?, last_attempt_at = ?
+        WHERE id = ?
+      `).run(newFailedAttempts, isNowBlocked, nowStr, attemptRow.id);
+    } else {
+      db.prepare(`
+        INSERT INTO ownership_attempts (id, user_id, item_id, failed_attempts, permanently_blocked, last_attempt_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(generateId(), loserId, itemId, newFailedAttempts, isNowBlocked, nowStr, nowStr);
+    }
+
+    logStatusChange({
+      entityType: 'claim',
+      entityId: claimId,
       actorId: loserId,
       actorRole: 'loser',
+      fromStatus: null,
+      toStatus: 'rejected',
+      note: `پاسخ نادرست (تلاش ${newFailedAttempts} از ${CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS})`,
     });
 
-    res.json({
-      verified: true,
-      claimId,
-      deliveryId,
-      message: 'مالکیت شما با موفقیت تأیید شد! اکنون می‌توانید گفت‌وگو و هماهنگی تحویل را آغاز کنید.',
-    });
-    return;
-  }
+    const remaining = Math.max(0, CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS - newFailedAttempts);
 
-  // Incorrect attempt -> atomically persist strike in ownership_attempts
-  const newFailedAttempts = (attemptRow?.failed_attempts || 0) + 1;
-  const isNowBlocked = newFailedAttempts >= CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS ? 1 : 0;
-
-  if (attemptRow) {
-    db.prepare(`
-      UPDATE ownership_attempts
-      SET failed_attempts = ?, permanently_blocked = ?, last_attempt_at = ?
-      WHERE id = ?
-    `).run(newFailedAttempts, isNowBlocked, nowStr, attemptRow.id);
-  } else {
-    db.prepare(`
-      INSERT INTO ownership_attempts (id, user_id, item_id, failed_attempts, permanently_blocked, last_attempt_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(generateId(), loserId, itemId, newFailedAttempts, isNowBlocked, nowStr, nowStr);
-  }
-
-  logStatusChange({
-    entityType: 'claim',
-    entityId: claimId,
-    actorId: loserId,
-    actorRole: 'loser',
-    fromStatus: null,
-    toStatus: 'rejected',
-    note: `پاسخ نادرست (تلاش ${newFailedAttempts} از ${CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS})`,
+    return {
+      status: isNowBlocked ? 403 : 200,
+      body: {
+        verified: false,
+        claimId,
+        failedAttempts: newFailedAttempts,
+        remainingAttempts: remaining,
+        permanentlyBlocked: Boolean(isNowBlocked),
+        message: isNowBlocked
+          ? 'به دلیل ۳ بار پاسخ اشتباه، دسترسی شما به این آگهی برای همیشه بسته شد. سایر آگهی‌ها همچنان قابل استفاده هستند.'
+          : `پاسخ‌های واردشده با مشخصات ثبت‌شده مطابقت نداشت. شما ${remaining} فرصت دیگر دارید.`,
+      },
+      sms: { phone: item.finder_phone, title: item.title },
+    };
   });
 
-  const remaining = Math.max(0, CONFIG.MAX_WRONG_OWNERSHIP_ATTEMPTS - newFailedAttempts);
+  // Dispatch SMS outside SQLite write lock
+  if (outcome.sms) {
+    await sendFinderClaimAlertSms(outcome.sms.phone, outcome.sms.title);
+  }
 
-  res.status(isNowBlocked ? 403 : 200).json({
-    verified: false,
-    claimId,
-    failedAttempts: newFailedAttempts,
-    remainingAttempts: remaining,
-    permanentlyBlocked: Boolean(isNowBlocked),
-    message: isNowBlocked
-      ? 'به دلیل ۳ بار پاسخ اشتباه، دسترسی شما به این آگهی برای همیشه بسته شد. سایر آگهی‌ها همچنان قابل استفاده هستند.'
-      : `پاسخ‌های واردشده با مشخصات ثبت‌شده مطابقت نداشت. شما ${remaining} فرصت دیگر دارید.`,
-  });
+  res.status(outcome.status).json(outcome.body);
 });
 
 /**
@@ -529,103 +538,111 @@ claimsRouter.post('/:id/finder-decision', requireAuth, (req, res) => {
     return;
   }
 
-  const db = getDb();
   const id = String(req.params.id);
   const finderId = req.user!.id;
 
-  const claim = db
-    .prepare(`
-      SELECT c.id, c.item_id, c.loser_id, c.finder_id, c.status,
-             fi.title, fi.delivery_method, fi.safe_point_id, fi.status AS item_status
-      FROM ownership_claims c
-      JOIN found_items fi ON fi.id = c.item_id
-      WHERE c.id = ?
-    `)
-    .get(id) as
-    | {
-        id: string;
-        item_id: string;
-        loser_id: string;
-        finder_id: string;
-        status: string;
-        title: string;
-        delivery_method: 'courier' | 'safe_point';
-        safe_point_id: string | null;
-        item_status: string;
-      }
-    | undefined;
+  const outcome = runInTransaction<{ status: number; body: Record<string, unknown> }>((db) => {
+    const claim = db
+      .prepare(`
+        SELECT c.id, c.item_id, c.loser_id, c.finder_id, c.status,
+               fi.title, fi.delivery_method, fi.safe_point_id, fi.status AS item_status
+        FROM ownership_claims c
+        JOIN found_items fi ON fi.id = c.item_id
+        WHERE c.id = ?
+      `)
+      .get(id) as
+      | {
+          id: string;
+          item_id: string;
+          loser_id: string;
+          finder_id: string;
+          status: string;
+          title: string;
+          delivery_method: 'courier' | 'safe_point';
+          safe_point_id: string | null;
+          item_status: string;
+        }
+      | undefined;
 
-  if (!claim) {
-    res.status(404).json({ error: 'درخواست یافت نشد.' });
-    return;
-  }
-  if (claim.finder_id !== finderId) {
-    res.status(403).json({ error: 'فقط یابنده این آگهی مجاز به تصمیم‌گیری است.' });
-    return;
-  }
-  if (claim.status === 'verified') {
-    res.status(400).json({ error: 'این درخواست قبلاً تأیید شده است.' });
-    return;
-  }
-
-  const nowStr = nowIso();
-  if (parsed.data.decision === 'approve') {
-    if (claim.item_status !== 'active') {
-      res.status(400).json({ error: 'این آگهی دیگر در وضعیت فعال نیست.' });
-      return;
+    if (!claim) {
+      return { status: 404, body: { error: 'درخواست یافت نشد.' } };
+    }
+    if (claim.finder_id !== finderId) {
+      return { status: 403, body: { error: 'فقط یابنده این آگهی مجاز به تصمیم‌گیری است.' } };
+    }
+    if (claim.status === 'verified') {
+      return { status: 400, body: { error: 'این درخواست قبلاً تأیید شده است.' } };
     }
 
-    db.prepare(`UPDATE ownership_claims SET finder_note = ?, updated_at = ? WHERE id = ?`).run(
-      parsed.data.note || null,
+    const blocked = db
+      .prepare(`
+        SELECT 1 FROM user_blocks
+        WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+      `)
+      .get(finderId, claim.loser_id, claim.loser_id, finderId);
+    if (blocked) {
+      return { status: 403, body: { error: 'به دلیل مسدودسازی، امکان ادامه این درخواست وجود ندارد.' } };
+    }
+
+    const nowStr = nowIso();
+    if (parsed.data.decision === 'approve') {
+      if (claim.item_status !== 'active') {
+        return { status: 400, body: { error: 'این آگهی دیگر در وضعیت فعال نیست.' } };
+      }
+
+      db.prepare(`UPDATE ownership_claims SET finder_note = ?, updated_at = ? WHERE id = ?`).run(
+        parsed.data.note || null,
+        nowStr,
+        claim.id
+      );
+
+      const deliveryId = initializeVerifiedClaim({
+        claimId: claim.id,
+        itemId: claim.item_id,
+        loserId: claim.loser_id,
+        finderId: claim.finder_id,
+        itemTitle: claim.title,
+        deliveryMethod: claim.delivery_method,
+        safePointId: claim.safe_point_id,
+        verifiedBy: 'finder',
+        actorId: finderId,
+        actorRole: 'finder',
+      });
+
+      createNotification({
+        userId: claim.loser_id,
+        type: 'finder_replied',
+        title: 'دریافت پاسخ از یابنده',
+        body: parsed.data.note
+          ? `یابنده «${claim.title}» پاسخ شما را بررسی و تأیید کرد: ${parsed.data.note}`
+          : `یابنده «${claim.title}» درخواست مالکیت شما را تأیید کرد.`,
+        linkPath: `/claims/${claim.id}`,
+        metadata: { claimId: claim.id },
+      });
+
+      return { status: 200, body: { ok: true, status: 'verified', claimId: claim.id, deliveryId } };
+    }
+
+    // Reject with note
+    db.prepare(`UPDATE ownership_claims SET status = 'rejected', finder_note = ?, updated_at = ? WHERE id = ?`).run(
+      parsed.data.note || 'پاسخ‌ها با مشخصات شیء مطابقت نداشت.',
       nowStr,
       claim.id
     );
-
-    const deliveryId = initializeVerifiedClaim({
-      claimId: claim.id,
-      itemId: claim.item_id,
-      loserId: claim.loser_id,
-      finderId: claim.finder_id,
-      itemTitle: claim.title,
-      deliveryMethod: claim.delivery_method,
-      safePointId: claim.safe_point_id,
-      verifiedBy: 'finder',
-      actorId: finderId,
-      actorRole: 'finder',
-    });
 
     createNotification({
       userId: claim.loser_id,
       type: 'finder_replied',
       title: 'دریافت پاسخ از یابنده',
-      body: parsed.data.note
-        ? `یابنده «${claim.title}» پاسخ شما را بررسی و تأیید کرد: ${parsed.data.note}`
-        : `یابنده «${claim.title}» درخواست مالکیت شما را تأیید کرد.`,
-      linkPath: `/claims/${claim.id}`,
+      body: `یابنده درباره «${claim.title}» پاسخ داد: ${parsed.data.note || 'پاسخ‌های ارائه‌شده تأیید نشد.'}`,
+      linkPath: `/items/${claim.item_id}`,
       metadata: { claimId: claim.id },
     });
 
-    res.json({ ok: true, status: 'verified', claimId: claim.id, deliveryId });
-    return;
-  }
-
-  // Reject with note
-  db.prepare(`UPDATE ownership_claims SET status = 'rejected', finder_note = ?, updated_at = ? WHERE id = ?`).run(
-    parsed.data.note || 'پاسخ‌ها با مشخصات شیء مطابقت نداشت.',
-    nowStr,
-    claim.id
-  );
-
-  createNotification({
-    userId: claim.loser_id,
-    type: 'finder_replied',
-    title: 'دریافت پاسخ از یابنده',
-    body: `یابنده درباره «${claim.title}» پاسخ داد: ${parsed.data.note || 'پاسخ‌های ارائه‌شده تأیید نشد.'}`,
-    linkPath: `/items/${claim.item_id}`,
-    metadata: { claimId: claim.id },
+    return { status: 200, body: { ok: true, status: 'rejected' } };
   });
 
-  res.json({ ok: true, status: 'rejected' });
+  res.status(outcome.status).json(outcome.body);
 });
 
 /**
