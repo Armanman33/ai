@@ -1,0 +1,57 @@
+@import "tailwindcss";
+@import "@fontsource/vazirmatn/400.css";
+@import "@fontsource/vazirmatn/500.css";
+@import "@fontsource/vazirmatn/600.css";
+@import "@fontsource/vazirmatn/700.css";
+@import "@fontsource/vazirmatn/800.css";
+@import "leaflet/dist/leaflet.css";
+
+@layer base {
+  html {
+    font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    direction: rtl;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #f7f7f5;
+    color: #111111;
+    overflow-x: hidden;
+  }
+
+  button:not(:disabled),
+  a[href] {
+    cursor: pointer;
+  }
+}
+
+/* Custom Leaflet styling for Peydash Yellow & Black theme + RTL */
+.leaflet-container {
+  font-family: 'Vazirmatn', system-ui, sans-serif !important;
+  background-color: #ecece6;
+  direction: ltr;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  opacity: 0.7;
+}
+
+.peydash-pin {
+  background: transparent;
+  border: none;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4ce;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

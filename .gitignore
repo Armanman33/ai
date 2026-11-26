@@ -1,0 +1,12 @@
+node_modules/
+client/dist/
+server/dist/
+storage/uploads/
+storage/previews/
+storage/demo/
+storage/.app_secret
+storage/peydash.db
+storage/peydash.db-*
+.env
+*.log
+*.tsbuildinfo
