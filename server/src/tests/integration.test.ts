@@ -6,7 +6,7 @@ import http from 'node:http';
 import sharp from 'sharp';
 
 // Isolated temporary SQLite DB for tests (never pollutes production/dev DB)
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'peydash-test-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ChikojA-test-'));
 process.env.STORAGE_DIR = tmpDir;
 process.env.DB_PATH = path.join(tmpDir, 'test.db');
 process.env.SEED_DEMO_DATA = 'false';
@@ -77,7 +77,7 @@ async function runTests() {
 
   try {
 
-  console.log('🧪 Running Peydash End-to-End & Security Test Suite...');
+  console.log('🧪 Running ChikojA End-to-End & Security Test Suite...');
 
   // 1. Auth validation & OTP flow
   {
@@ -109,12 +109,12 @@ async function runTests() {
     const me2 = await reqJson('GET', '/api/auth/me', { token: owner.token });
     assert.equal((me2.json.user as { notificationsEnabled: boolean }).notificationsEnabled, true);
 
-    // Also verify X-Peydash-Session header works independently of Authorization/Cookie (for restricted iframes/proxies)
+    // Also verify X-ChikojA-Session header works independently of Authorization/Cookie (for restricted iframes/proxies)
     const customHeaderRes = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { 'X-Peydash-Session': owner.token },
+      headers: { 'X-ChikojA-Session': owner.token },
     });
-    assert.equal(customHeaderRes.status, 200, 'X-Peydash-Session header must authenticate cleanly');
-    console.log('  ✓ 2. Notification opt-in persistence & X-Peydash-Session header auth passed');
+    assert.equal(customHeaderRes.status, 200, 'X-ChikojA-Session header must authenticate cleanly');
+    console.log('  ✓ 2. Notification opt-in persistence & X-ChikojA-Session header auth passed');
   }
 
   // 3. Tehran-only geo enforcement & Sensitive ID delivery rules
@@ -408,7 +408,7 @@ async function runTests() {
       body: { code: pickupCode },
     });
     assert.equal(finalOk.status, 200);
-    assert.ok(String(finalOk.json.finalReceiptNo).startsWith('PYD-DL-'));
+    assert.ok(String(finalOk.json.finalReceiptNo).startsWith('CHK-DL-'));
 
     // Reusing one-time code fails
     const replay = await reqJson('POST', `/api/deliveries/${claimId}/confirm-delivery`, {
@@ -449,7 +449,7 @@ async function runTests() {
       body: { code: dropCode, operatorName: 'مسئول مترو انقلاب' },
     });
     assert.equal(dropOk.status, 200);
-    assert.ok(String(dropOk.json.safePointReceiptNo).startsWith('PYD-SP-'));
+    assert.ok(String(dropOk.json.safePointReceiptNo).startsWith('CHK-SP-'));
 
     // Owner picks up from Safe Point with one-time pickup code -> Final Receipt issued
     const oRoom = await reqJson('GET', `/api/claims/${idClaimId}`, { token: owner.token });

@@ -24,7 +24,7 @@ interface TehranMapProps {
 }
 
 const PIN_ICON = L.divIcon({
-  className: 'peydash-pin',
+  className: 'chikoja-pin',
   html: `<div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;transform:translate(-50%,-100%);">
     <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M18 2C10.82 2 5 7.82 5 15C5 24.75 18 34 18 34C18 34 31 24.75 31 15C31 7.82 25.18 2 18 2Z" fill="#0A0A0A" stroke="#FACC15" stroke-width="2.5"/>
@@ -108,7 +108,7 @@ export const TehranMap: React.FC<TehranMapProps> = ({
     const tileUrl =
       import.meta.env.VITE_MAP_TILE_URL || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
     L.tileLayer(tileUrl, {
-      attribution: '&copy; OpenStreetMap | پیداش تهران',
+      attribution: '&copy; OpenStreetMap | چی‌کجا تهران',
       maxZoom: 18,
     }).addTo(map);
 
@@ -135,7 +135,7 @@ export const TehranMap: React.FC<TehranMapProps> = ({
     map.on('click', (e: L.LeafletMouseEvent) => {
       const { lat: cLat, lng: cLng } = e.latlng;
       if (!isInsideTehran(cLat, cLng)) {
-        setGeoMsg('پیداش فقط در محدوده شهر تهران فعال است. لطفاً نقطه‌ای داخل تهران انتخاب کنید.');
+        setGeoMsg('چی‌کجا فقط در محدوده شهر تهران فعال است. لطفاً نقطه‌ای داخل تهران انتخاب کنید.');
         return;
       }
       setGeoMsg(null);

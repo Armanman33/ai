@@ -1,8 +1,8 @@
 {
-  "name": "peydash-platform",
+  "name": "chikoja-platform",
   "version": "1.0.0",
   "private": true,
-  "description": "پیداش — سامانه مکان‌محور یافتن اشیای گمشده در شهر تهران",
+  "description": "چی‌کجا — سامانه مکان‌محور یافتن اشیای گمشده در شهر تهران",
   "scripts": {
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",

@@ -48,7 +48,7 @@ export const DeliveryPanel: React.FC<DeliveryPanelProps> = ({
     delivery?.safePoint?.id || safePoints[0]?.id || ''
   );
   const [codeInput, setCodeInput] = useState('');
-  const [operatorName, setOperatorName] = useState('مسئول باجه نقطه امن پیداش');
+  const [operatorName, setOperatorName] = useState('مسئول باجه نقطه امن چی‌کجا');
   const [busy, setBusy] = useState(false);
 
   if (!delivery) return null;
@@ -511,7 +511,7 @@ export const DeliveryPanel: React.FC<DeliveryPanelProps> = ({
           <div className="bg-[#0A0A0A] text-white px-4 py-3.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Receipt className="w-5 h-5 text-[#FACC15]" />
-              <span className="font-extrabold text-sm">رسید دیجیتال تحویل پیداش</span>
+              <span className="font-extrabold text-sm">رسید دیجیتال تحویل چی‌کجا</span>
             </div>
             {delivery.status === 'delivered' && (
               <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">

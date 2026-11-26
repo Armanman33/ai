@@ -23,7 +23,7 @@ export function generateOneTimeDeliveryCode(): string {
 export function generateReceiptNumber(prefix: 'SP' | 'DL'): string {
   const randomPart = crypto.randomBytes(3).toString('hex').toUpperCase();
   const numPart = crypto.randomInt(1000, 9999);
-  return `PYD-${prefix}-${numPart}-${randomPart}`;
+  return `CHK-${prefix}-${numPart}-${randomPart}`;
 }
 
 export function hashSecret(value: string): string {

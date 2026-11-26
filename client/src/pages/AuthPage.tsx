@@ -106,7 +106,7 @@ export const AuthPage: React.FC = () => {
             {step === 'phone' ? <Smartphone className="w-7 h-7" /> : <KeyRound className="w-7 h-7" />}
           </div>
           <h1 className="text-xl font-extrabold">
-            {step === 'phone' ? 'ورود یا ثبت‌نام در پیداش' : 'تأیید کد پیامکی'}
+            {step === 'phone' ? 'ورود یا ثبت‌نام در چی‌کجا' : 'تأیید کد پیامکی'}
           </h1>
           <p className="text-xs sm:text-sm text-neutral-300 mt-1.5">
             {step === 'phone'
@@ -214,7 +214,7 @@ export const AuthPage: React.FC = () => {
                 disabled={busy}
                 className="w-full bg-[#FACC15] hover:bg-[#EAB308] text-[#0A0A0A] font-extrabold text-sm sm:text-base py-3.5 rounded-xl transition-colors disabled:opacity-60"
               >
-                {busy ? 'در حال بررسی...' : 'تأیید و ورود به پیداش'}
+                {busy ? 'در حال بررسی...' : 'تأیید و ورود به چی‌کجا'}
               </button>
 
               <div className="flex items-center justify-between text-xs pt-1">

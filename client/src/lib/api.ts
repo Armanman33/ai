@@ -1,5 +1,5 @@
-const TOKEN_STORAGE_KEY = 'peydash_auth_token';
-const WINDOW_NAME_PREFIX = 'PEYDASH_SESSION:';
+const TOKEN_STORAGE_KEY = 'ChikojA_auth_token';
+const WINDOW_NAME_PREFIX = 'ChikojA_SESSION:';
 
 // In-memory primary token store (immune to sandboxed/cross-site iframe storage blocks)
 let memoryToken: string | null = null;
@@ -100,8 +100,8 @@ export async function apiFetch<T>(
     if (!headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    if (!headers.has('X-Peydash-Session')) {
-      headers.set('X-Peydash-Session', token);
+    if (!headers.has('X-ChikojA-Session')) {
+      headers.set('X-ChikojA-Session', token);
     }
   }
   if (!(options.body instanceof FormData) && options.body && !headers.has('Content-Type')) {

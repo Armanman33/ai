@@ -5,8 +5,8 @@ storage/uploads/
 storage/previews/
 storage/demo/
 storage/.app_secret
-storage/peydash.db
-storage/peydash.db-*
+storage/*.db
+storage/*.db-*
 .env
 *.log
 *.tsbuildinfo

@@ -88,7 +88,7 @@ chatRouter.get('/:claimId/messages', requireAuth, (req, res) => {
       id: m.id,
       isMine: !m.is_system && m.sender_id === req.user!.id,
       isSystem: Boolean(m.is_system),
-      senderName: m.is_system ? 'سامانه پیداش' : m.sender_name,
+      senderName: m.is_system ? 'سامانه چی‌کجا' : m.sender_name,
       body: m.body,
       readAt: m.read_at,
       createdAt: m.created_at,

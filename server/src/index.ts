@@ -79,7 +79,7 @@ async function bootstrap() {
 
   const app = createApp();
   app.listen(CONFIG.PORT, CONFIG.HOST, () => {
-    console.log(`پیداش (Peydash) server listening on http://${CONFIG.HOST}:${CONFIG.PORT}`);
+    console.log(`چی‌کجا (ChikojA) server listening on http://${CONFIG.HOST}:${CONFIG.PORT}`);
   });
 }
 

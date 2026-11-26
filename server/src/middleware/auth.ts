@@ -19,10 +19,10 @@ declare global {
   }
 }
 
-export const SESSION_COOKIE_NAME = 'peydash_session';
+export const SESSION_COOKIE_NAME = 'ChikojA_session';
 
 function extractToken(req: Request): string | null {
-  const customHeader = req.headers['x-peydash-session'];
+  const customHeader = req.headers['x-chikoja-session'];
   if (typeof customHeader === 'string' && customHeader.trim()) {
     return customHeader.trim();
   }

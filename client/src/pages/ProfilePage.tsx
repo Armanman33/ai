@@ -174,7 +174,7 @@ export const ProfilePage: React.FC = () => {
       <div className="bg-[#0A0A0A] text-white rounded-2xl p-5 space-y-2.5">
         <div className="flex items-center gap-2 text-[#FACC15] text-sm font-extrabold">
           <ShieldCheck className="w-5 h-5" />
-          <span>اصول حریم خصوصی در پیداش</span>
+          <span>اصول حریم خصوصی در چی‌کجا</span>
         </div>
         <ul className="text-xs text-neutral-300 space-y-1.5 leading-6">
           <li className="flex items-center gap-2">

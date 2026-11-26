@@ -24,8 +24,12 @@ export function getDb(): DatabaseSync {
 
 function ensureSafePoints(db: DatabaseSync): void {
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO safe_points (id, name, type, area, address, lat, lng, hours, is_active)
+    INSERT INTO safe_points (id, name, type, area, address, lat, lng, hours, is_active)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      address = excluded.address,
+      hours = excluded.hours
   `);
   for (const sp of SAFE_POINTS_SEED) {
     stmt.run(sp.id, sp.name, sp.type, sp.area, sp.address, sp.lat, sp.lng, sp.hours);

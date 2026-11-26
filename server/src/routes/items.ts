@@ -122,7 +122,7 @@ itemsRouter.get('/search', (req, res) => {
   const timeSlot = typeof req.query.timeSlot === 'string' ? req.query.timeSlot.trim() : undefined;
 
   if (lat !== null && lng !== null && (!Number.isFinite(lat) || !Number.isFinite(lng) || !isInsideTehran(lat, lng))) {
-    res.status(400).json({ error: 'پیداش در حال حاضر فقط در محدوده شهر تهران فعال است.' });
+    res.status(400).json({ error: 'چی‌کجا در حال حاضر فقط در محدوده شهر تهران فعال است.' });
     return;
   }
 

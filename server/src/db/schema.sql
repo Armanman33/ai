@@ -4,7 +4,7 @@ PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   phone TEXT NOT NULL UNIQUE,
-  display_name TEXT NOT NULL DEFAULT 'کاربر پیداش',
+  display_name TEXT NOT NULL DEFAULT 'کاربر چی‌کجا',
   notifications_enabled INTEGER NOT NULL DEFAULT 0,
   is_demo INTEGER NOT NULL DEFAULT 0,
   is_suspended INTEGER NOT NULL DEFAULT 0,

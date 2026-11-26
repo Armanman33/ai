@@ -381,7 +381,7 @@ deliveriesRouter.post('/:claimId/confirm-safe-point-dropoff', requireAuth, (req,
 
   const db = getDb();
   const nowStr = nowIso();
-  const operatorName = parsed.data.operatorName || 'مسئول باجه نقطه امن پیداش';
+  const operatorName = parsed.data.operatorName || 'مسئول باجه نقطه امن چی‌کجا';
   const safePointReceipt = generateReceiptNumber('SP');
   const pickupCode = generateOneTimeDeliveryCode();
   const pickupHash = hashSecret(`pickup:${ctx.deliveryId}:${pickupCode}`);

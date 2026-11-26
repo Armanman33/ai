@@ -92,7 +92,7 @@ safetyRouter.post('/report', requireAuth, reportLimiter, (req, res) => {
 
   res.status(201).json({
     ok: true,
-    message: 'گزارش شما ثبت شد و توسط تیم امنیت پیداش بررسی می‌شود.',
+    message: 'گزارش شما ثبت شد و توسط تیم امنیت چی‌کجا بررسی می‌شود.',
   });
 });
 

@@ -33,7 +33,7 @@ import { ClaimRoomPage } from './pages/ClaimRoomPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ProfilePage } from './pages/ProfilePage';
 
-const PeydashLogo: React.FC = () => (
+const ChikojALogo: React.FC = () => (
   <Link to="/" className="flex items-center gap-2.5 shrink-0">
     <div className="w-9 h-9 rounded-xl bg-[#FACC15] text-[#0A0A0A] flex items-center justify-center shadow-xs">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -45,7 +45,7 @@ const PeydashLogo: React.FC = () => (
       </svg>
     </div>
     <div className="leading-tight">
-      <div className="text-base font-black text-white tracking-tight">پیداش</div>
+      <div className="text-base font-black text-white tracking-tight">چی‌کجا</div>
       <div className="text-[10px] font-semibold text-[#FACC15]">تهران</div>
     </div>
   </Link>
@@ -79,7 +79,7 @@ const AppShell: React.FC = () => {
       {/* Sticky Top Header (Black & Yellow structural chrome) */}
       <header className="sticky top-0 z-40 bg-[#0A0A0A] text-white border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 h-15 flex items-center justify-between gap-4">
-          <PeydashLogo />
+          <ChikojALogo />
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1" aria-label="منوی اصلی">
@@ -169,7 +169,7 @@ const AppShell: React.FC = () => {
               element={
                 <div className="bg-white rounded-3xl border border-neutral-200 p-8 text-center space-y-3">
                   <h1 className="text-xl font-black">صفحه موردنظر یافت نشد</h1>
-                  <p className="text-sm text-neutral-600">مسیر واردشده در پیداش وجود ندارد.</p>
+                  <p className="text-sm text-neutral-600">مسیر واردشده در چی‌کجا وجود ندارد.</p>
                   <Link
                     to="/"
                     className="inline-block bg-[#FACC15] text-[#0A0A0A] font-extrabold text-sm px-5 py-2.5 rounded-xl"

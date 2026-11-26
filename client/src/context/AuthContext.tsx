@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { ApiError, apiFetch, setStoredToken } from '../lib/api';
 import { MetaConfig, UserCounts, UserProfile } from '../types';
 
-const NOTIF_DISMISS_SESSION_KEY = 'peydash_notif_popup_dismissed_this_visit';
+const NOTIF_DISMISS_SESSION_KEY = 'ChikojA_notif_popup_dismissed_this_visit';
 
 interface AuthContextValue {
   user: UserProfile | null;

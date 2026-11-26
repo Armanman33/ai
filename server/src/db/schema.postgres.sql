@@ -1,10 +1,10 @@
--- PostgreSQL / Supabase production migration schema for Peydash (پیداش)
+-- PostgreSQL / Supabase production migration schema for ChikojA (چی‌کجا)
 -- Mirrors SQLite runtime schema 1:1 for seamless production migration.
 
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   phone VARCHAR(15) NOT NULL UNIQUE,
-  display_name VARCHAR(80) NOT NULL DEFAULT 'کاربر پیداش',
+  display_name VARCHAR(80) NOT NULL DEFAULT 'کاربر چی‌کجا',
   notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   is_demo BOOLEAN NOT NULL DEFAULT FALSE,
   is_suspended BOOLEAN NOT NULL DEFAULT FALSE,

@@ -11,7 +11,7 @@ export const STORAGE_DIR = process.env.STORAGE_DIR || path.join(ROOT_DIR, 'stora
 export const UPLOADS_DIR = path.join(STORAGE_DIR, 'uploads');
 export const PREVIEWS_DIR = path.join(STORAGE_DIR, 'previews');
 export const DEMO_MEDIA_DIR = path.join(STORAGE_DIR, 'demo');
-export const DB_PATH = process.env.DB_PATH || path.join(STORAGE_DIR, 'peydash.db');
+export const DB_PATH = process.env.DB_PATH || path.join(STORAGE_DIR, 'ChikojA.db');
 export const CLIENT_DIST_DIR = path.join(ROOT_DIR, 'client', 'dist');
 
 for (const dir of [STORAGE_DIR, UPLOADS_DIR, PREVIEWS_DIR, DEMO_MEDIA_DIR]) {

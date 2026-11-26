@@ -13,7 +13,7 @@ export const metaRouter = Router();
 metaRouter.get('/health', (_req, res) => {
   res.json({
     ok: true,
-    service: 'peydash-api',
+    service: 'ChikojA-api',
     city: 'Tehran',
     timestamp: new Date().toISOString(),
   });

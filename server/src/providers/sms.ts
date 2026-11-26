@@ -72,7 +72,7 @@ async function dispatchSms(
 }
 
 export async function sendOtpSms(phone: string, code: string): Promise<SmsSendResult> {
-  const message = `پیداش | کد تأیید ورود شما: ${code}\nاین کد تا ۳ دقیقه معتبر است.`;
+  const message = `چی‌کجا | کد تأیید ورود شما: ${code}\nاین کد تا ۳ دقیقه معتبر است.`;
   const res = await dispatchSms(phone, 'auth_otp', message);
   return {
     sent: res.ok,
@@ -82,7 +82,7 @@ export async function sendOtpSms(phone: string, code: string): Promise<SmsSendRe
 }
 
 export async function sendFinderClaimAlertSms(phone: string, itemTitle: string): Promise<SmsSendResult> {
-  const message = `پیداش | یک درخواست بررسی مالکیت برای آگهی «${itemTitle}» ثبت شد. لطفاً وارد سامانه پیداش شوید.`;
+  const message = `چی‌کجا | یک درخواست بررسی مالکیت برای آگهی «${itemTitle}» ثبت شد. لطفاً وارد سامانه چی‌کجا شوید.`;
   const res = await dispatchSms(phone, 'finder_claim_received', message);
   return {
     sent: res.ok,

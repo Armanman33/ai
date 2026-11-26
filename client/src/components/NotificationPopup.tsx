@@ -14,7 +14,7 @@ export const NotificationPopup: React.FC = () => {
     setBusy(true);
     try {
       await enableNotifications();
-      showToast('اعلان‌های پیداش با موفقیت فعال شد.', 'success');
+      showToast('اعلان‌های چی‌کجا با موفقیت فعال شد.', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'خطا در فعال‌سازی اعلان‌ها', 'error');
     } finally {
@@ -36,7 +36,7 @@ export const NotificationPopup: React.FC = () => {
           </div>
           <div>
             <h2 id="notif-modal-title" className="text-base font-extrabold">
-              فعال‌سازی اعلان‌های پیداش
+              فعال‌سازی اعلان‌های چی‌کجا
             </h2>
             <p className="text-xs text-neutral-300 mt-1">
               اطلاع‌رسانی سریع برای پیدا شدن شیء یا دریافت درخواست جدید
