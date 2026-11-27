@@ -10,6 +10,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { ChatMessage, ClaimRoomData } from '../types';
@@ -22,6 +23,12 @@ export const ClaimRoomPage: React.FC = () => {
   const { user, meta, loading: authLoading } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'گفت‌وگوی داخلی و هماهنگی تحویل | چی‌کجا',
+    description: 'اتاق امن گفت‌وگوی داخلی و تحویل شیء در سامانه چی‌کجا.',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [claim, setClaim] = useState<ClaimRoomData | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);

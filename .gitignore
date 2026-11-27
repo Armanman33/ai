@@ -8,5 +8,12 @@ storage/.app_secret
 storage/*.db
 storage/*.db-*
 .env
+.env.*
+!.env.example
+client/.env
+client/.env.*
+server/.env
+server/.env.*
+logs/
 *.log
 *.tsbuildinfo

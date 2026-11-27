@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import {
   BrowserRouter,
   Link,
@@ -20,18 +20,53 @@ import { ToastProvider } from './context/ToastContext';
 import { NotificationPopup } from './components/NotificationPopup';
 import { ErrorState, LoadingSkeleton, OfflineBanner } from './components/StateViews';
 import { toPersianDigits } from './lib/persian';
+import { usePageSeo } from './lib/seo';
 
+// Keep HomePage eager for fastest initial LCP on `/`; lazy-load secondary & map-heavy routes
 import { HomePage } from './pages/HomePage';
-import { AuthPage } from './pages/AuthPage';
-import { LostFlowPage } from './pages/LostFlowPage';
-import { FoundFlowPage } from './pages/FoundFlowPage';
-import { ItemDetailPage } from './pages/ItemDetailPage';
-import { MyAdsPage } from './pages/MyAdsPage';
-import { MyAlertsPage } from './pages/MyAlertsPage';
-import { RequestsPage } from './pages/RequestsPage';
-import { ClaimRoomPage } from './pages/ClaimRoomPage';
-import { NotificationsPage } from './pages/NotificationsPage';
-import { ProfilePage } from './pages/ProfilePage';
+
+const AuthPage = lazy(() => import('./pages/AuthPage').then((m) => ({ default: m.AuthPage })));
+const LostFlowPage = lazy(() => import('./pages/LostFlowPage').then((m) => ({ default: m.LostFlowPage })));
+const FoundFlowPage = lazy(() => import('./pages/FoundFlowPage').then((m) => ({ default: m.FoundFlowPage })));
+const CategoryPage = lazy(() => import('./pages/CategoryPage').then((m) => ({ default: m.CategoryPage })));
+const ItemDetailPage = lazy(() => import('./pages/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage })));
+const MyAdsPage = lazy(() => import('./pages/MyAdsPage').then((m) => ({ default: m.MyAdsPage })));
+const MyAlertsPage = lazy(() => import('./pages/MyAlertsPage').then((m) => ({ default: m.MyAlertsPage })));
+const RequestsPage = lazy(() => import('./pages/RequestsPage').then((m) => ({ default: m.RequestsPage })));
+const ClaimRoomPage = lazy(() => import('./pages/ClaimRoomPage').then((m) => ({ default: m.ClaimRoomPage })));
+const NotificationsPage = lazy(() =>
+  import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
+);
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+
+const NotFoundPage: React.FC = () => {
+  usePageSeo({
+    title: 'صفحه موردنظر یافت نشد (۴۰۴) | چی‌کجا',
+    description: 'مسیر واردشده در سامانه اشیای گمشده تهران (چی‌کجا) وجود ندارد.',
+    robots: 'noindex, nofollow',
+  });
+
+  return (
+    <div className="bg-white rounded-3xl border border-neutral-200 p-8 text-center space-y-3">
+      <h1 className="text-xl font-black">صفحه موردنظر یافت نشد</h1>
+      <p className="text-sm text-neutral-600">مسیر واردشده در چی‌کجا وجود ندارد.</p>
+      <div className="flex flex-wrap justify-center gap-2 pt-2">
+        <Link
+          to="/"
+          className="inline-block bg-[#FACC15] text-[#0A0A0A] font-extrabold text-sm px-5 py-2.5 rounded-xl"
+        >
+          بازگشت به صفحه اصلی
+        </Link>
+        <Link
+          to="/lost"
+          className="inline-block bg-[#0A0A0A] text-[#FACC15] font-bold text-sm px-5 py-2.5 rounded-xl"
+        >
+          جست‌وجو در تهران
+        </Link>
+      </div>
+    </div>
+  );
+};
 
 const ChikojALogo: React.FC = () => (
   <Link to="/" className="flex items-center gap-2.5 shrink-0">
@@ -52,7 +87,7 @@ const ChikojALogo: React.FC = () => (
 );
 
 const AppShell: React.FC = () => {
-  const { user, counts, loading, metaError, refreshMeta } = useAuth();
+  const { user, meta, counts, loading, metaError, refreshMeta } = useAuth();
 
   const desktopNav = [
     { to: '/', label: 'خانه', end: true },
@@ -146,42 +181,74 @@ const AppShell: React.FC = () => {
       <OfflineBanner />
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 pt-5 pb-24 md:pb-10">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 pt-5 pb-10">
         {loading ? (
           <LoadingSkeleton rows={4} />
         ) : metaError ? (
           <ErrorState message={metaError} onRetry={refreshMeta} />
         ) : (
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/lost" element={<LostFlowPage />} />
-            <Route path="/found" element={<FoundFlowPage />} />
-            <Route path="/items/:id" element={<ItemDetailPage />} />
-            <Route path="/my-ads" element={<MyAdsPage />} />
-            <Route path="/my-alerts" element={<MyAlertsPage />} />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/claims/:id" element={<ClaimRoomPage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route
-              path="*"
-              element={
-                <div className="bg-white rounded-3xl border border-neutral-200 p-8 text-center space-y-3">
-                  <h1 className="text-xl font-black">صفحه موردنظر یافت نشد</h1>
-                  <p className="text-sm text-neutral-600">مسیر واردشده در چی‌کجا وجود ندارد.</p>
-                  <Link
-                    to="/"
-                    className="inline-block bg-[#FACC15] text-[#0A0A0A] font-extrabold text-sm px-5 py-2.5 rounded-xl"
-                  >
-                    بازگشت به صفحه اصلی
-                  </Link>
-                </div>
-              }
-            />
-          </Routes>
+          <Suspense fallback={<LoadingSkeleton rows={4} />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/lost" element={<LostFlowPage />} />
+              <Route path="/found" element={<FoundFlowPage />} />
+              <Route path="/category/:slug" element={<CategoryPage />} />
+              <Route path="/items/:id" element={<ItemDetailPage />} />
+              <Route path="/my-ads" element={<MyAdsPage />} />
+              <Route path="/my-alerts" element={<MyAlertsPage />} />
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route path="/claims/:id" element={<ClaimRoomPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
         )}
       </main>
+
+      {/* Semantic Minimal Footer with Tehran Public Navigation Links */}
+      <footer className="bg-[#0A0A0A] text-neutral-300 border-t border-white/10 pb-20 md:pb-8">
+        <div className="max-w-5xl mx-auto px-4 py-7 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-white">
+                چی‌کجا <span className="text-[#FACC15]">| سامانه اشیای گمشده شهر تهران</span>
+              </div>
+              <p className="text-xs text-neutral-400 mt-1">
+                ارتباط امن میان گم‌کننده و یابنده در تهران؛ بدون نمایش شماره تماس و نشانی منزل.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <Link to="/lost" className="bg-[#FACC15] text-[#0A0A0A] px-3 py-1.5 rounded-lg">
+                گم کرده‌ام
+              </Link>
+              <Link to="/found" className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg">
+                پیدا کرده‌ام
+              </Link>
+            </div>
+          </div>
+
+          {meta && meta.categories.length > 0 && (
+            <nav aria-label="دسته‌بندی اشیای گمشده تهران" className="pt-3 border-t border-white/10">
+              <div className="text-[11px] font-bold text-neutral-400 mb-2">
+                دسته‌بندی‌های چی‌کجا در تهران:
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                {meta.categories.map((cat) => (
+                  <Link
+                    key={cat.id}
+                    to={`/category/${cat.slug}`}
+                    className="text-neutral-300 hover:text-[#FACC15] transition-colors"
+                  >
+                    {cat.label}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          )}
+        </div>
+      </footer>
 
       {/* Mobile Bottom Tab Bar */}
       <nav

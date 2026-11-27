@@ -1,6 +1,8 @@
 import { CONFIG } from '../config.js';
 import { getDb, nowIso } from '../db/database.js';
 import { generateId } from '../utils/crypto.js';
+import { logger } from '../utils/logger.js';
+import { maskPhoneForSelf } from '../utils/persian.js';
 
 export interface SmsSendResult {
   sent: boolean;
@@ -16,7 +18,7 @@ export interface SmsProvider {
 class SandboxSmsProvider implements SmsProvider {
   name = 'sandbox';
   async send(_phone: string, _message: string): Promise<{ ok: boolean }> {
-    // In sandbox/development mode, SMS delivery is simulated and persisted in sms_logs.
+    // In sandbox/development mode, SMS delivery is simulated and logged (with OTP redacted).
     return { ok: true };
   }
 }
@@ -30,7 +32,11 @@ class KavenegarSmsProvider implements SmsProvider {
     try {
       const url = `https://api.kavenegar.com/v1/${encodeURIComponent(CONFIG.KAVENEGAR_API_KEY)}/sms/send.json`;
       const body = new URLSearchParams({ receptor: phone, message });
-      const res = await fetch(url, { method: 'POST', body });
+      const res = await fetch(url, {
+        method: 'POST',
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
       if (!res.ok) {
         return { ok: false, error: `HTTP ${res.status}` };
       }
@@ -51,19 +57,35 @@ function getProvider(): SmsProvider {
 async function dispatchSms(
   phone: string,
   eventType: string,
-  message: string
+  message: string,
+  redactedLogMessage?: string
 ): Promise<{ ok: boolean; provider: string }> {
   const provider = getProvider();
+  if (CONFIG.IS_PRODUCTION && provider.name === 'sandbox' && !CONFIG.ALLOW_SANDBOX_SMS_IN_PROD) {
+    logger.error('sms_blocked_sandbox_in_production', { eventType });
+    return { ok: false, provider: 'unconfigured' };
+  }
+
   const result = await provider.send(phone, message);
+  if (!result.ok) {
+    logger.warn('sms_dispatch_failed', {
+      eventType,
+      provider: provider.name,
+      recipient: maskPhoneForSelf(phone),
+      reason: result.error,
+    });
+  }
+
   const db = getDb();
+  // Store privacy-safe message in sms_logs (NEVER store raw OTP codes in DB logs)
   db.prepare(`
     INSERT INTO sms_logs (id, recipient_phone, event_type, message, provider, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     generateId(),
-    phone,
+    maskPhoneForSelf(phone),
     eventType,
-    message,
+    redactedLogMessage || message,
     provider.name,
     result.ok ? 'sent' : 'failed',
     nowIso()
@@ -73,11 +95,14 @@ async function dispatchSms(
 
 export async function sendOtpSms(phone: string, code: string): Promise<SmsSendResult> {
   const message = `چی‌کجا | کد تأیید ورود شما: ${code}\nاین کد تا ۳ دقیقه معتبر است.`;
-  const res = await dispatchSms(phone, 'auth_otp', message);
+  const redactedMessage = 'چی‌کجا | کد تأیید ورود ۵ رقمی ارسال شد [محرمانه]';
+  const res = await dispatchSms(phone, 'auth_otp', message, redactedMessage);
+  const exposeSandboxCode =
+    res.provider === 'sandbox' && (!CONFIG.IS_PRODUCTION || CONFIG.ALLOW_SANDBOX_SMS_IN_PROD);
   return {
     sent: res.ok,
     provider: res.provider,
-    sandboxCode: res.provider === 'sandbox' ? code : undefined,
+    sandboxCode: exposeSandboxCode ? code : undefined,
   };
 }
 

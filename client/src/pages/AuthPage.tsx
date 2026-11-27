@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Smartphone, KeyRound, ShieldCheck, ArrowRight, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { toPersianDigits } from '../lib/persian';
@@ -12,6 +13,13 @@ export const AuthPage: React.FC = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+
+  usePageSeo({
+    title: 'ورود و ثبت‌نام با شماره موبایل | چی‌کجا',
+    description: 'ورود امن با شماره موبایل و کد پیامکی به سامانه اشیای گمشده تهران (چی‌کجا).',
+    canonicalPath: '/auth',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const returnTo = (location.state as { from?: string } | null)?.from || '/';
 

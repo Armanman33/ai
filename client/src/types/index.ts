@@ -10,7 +10,11 @@ export type ItemCategory =
 
 export interface CategoryMeta {
   id: ItemCategory;
+  slug: string;
   label: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoIntro?: string;
   sensitive: boolean;
   safePointOnly: boolean;
   suggestedQuestions: string[];

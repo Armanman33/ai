@@ -9,6 +9,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { IncomingClaim, MyClaim } from '../types';
@@ -23,6 +24,13 @@ export const RequestsPage: React.FC = () => {
   const { user, loading: authLoading, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'درخواست‌های دریافتی و ارسالی | چی‌کجا',
+    description: 'مدیریت درخواست‌های بررسی مالکیت و هماهنگی تحویل در حساب کاربری چی‌کجا.',
+    canonicalPath: '/requests',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [tab, setTab] = useState<'incoming' | 'mine'>('incoming');
   const [incoming, setIncoming] = useState<IncomingClaim[]>([]);

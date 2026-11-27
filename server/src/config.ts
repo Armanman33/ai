@@ -18,8 +18,14 @@ for (const dir of [STORAGE_DIR, UPLOADS_DIR, PREVIEWS_DIR, DEMO_MEDIA_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
+
 function loadOrCreateSecret(): string {
-  if (process.env.APP_SECRET && process.env.APP_SECRET.length >= 32) {
+  if (process.env.APP_SECRET) {
+    if (process.env.APP_SECRET.length < 32) {
+      throw new Error('APP_SECRET must be at least 32 characters long.');
+    }
     return process.env.APP_SECRET;
   }
   const secretPath = path.join(STORAGE_DIR, '.app_secret');
@@ -32,22 +38,43 @@ function loadOrCreateSecret(): string {
   return fresh;
 }
 
+function normalizeSiteUrl(raw: string | undefined): string {
+  const fallback = 'https://chikoja.ir';
+  if (!raw || !raw.trim()) return fallback;
+  return raw.trim().replace(/\/+$/, '');
+}
+
+const seedDemoEnv = process.env.SEED_DEMO_DATA;
+// In production, demo seeding defaults to OFF unless explicitly set to 'true'.
+// In development, demo seeding defaults to ON unless explicitly set to 'false'.
+const SEED_DEMO_DATA = IS_PRODUCTION ? seedDemoEnv === 'true' : seedDemoEnv !== 'false';
+
 export const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   HOST: process.env.HOST || '0.0.0.0',
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV,
+  IS_PRODUCTION,
+  TRUST_PROXY: process.env.TRUST_PROXY !== 'false' ? 1 : false,
+  PUBLIC_SITE_URL: normalizeSiteUrl(process.env.PUBLIC_SITE_URL),
+  ALLOW_IFRAME_EMBEDDING: process.env.ALLOW_IFRAME_EMBEDDING
+    ? process.env.ALLOW_IFRAME_EMBEDDING === 'true'
+    : !IS_PRODUCTION,
+  GOOGLE_SITE_VERIFICATION: (process.env.GOOGLE_SITE_VERIFICATION || '').trim(),
   APP_SECRET: loadOrCreateSecret(),
   SMS_PROVIDER: process.env.SMS_PROVIDER || 'sandbox', // 'sandbox' | 'kavenegar'
+  ALLOW_SANDBOX_SMS_IN_PROD: process.env.ALLOW_SANDBOX_SMS_IN_PROD === 'true',
   KAVENEGAR_API_KEY: process.env.KAVENEGAR_API_KEY || '',
-  SEED_DEMO_DATA: process.env.SEED_DEMO_DATA !== 'false',
+  SEED_DEMO_DATA,
 
-  // Lifecycle rules (strictly per specification)
+  // Lifecycle & Security rules (strictly per specification)
   FOUND_ITEM_TTL_DAYS: 3,
   LOST_ALERT_TTL_DAYS: 5,
   NEAR_EXPIRY_HOURS: 12,
   MAX_WRONG_OWNERSHIP_ATTEMPTS: 3,
   OTP_EXPIRY_MINUTES: 3,
+  OTP_COOLDOWN_SECONDS: Number(process.env.OTP_COOLDOWN_SECONDS ?? (IS_PRODUCTION ? 45 : 0)),
   SESSION_TTL_DAYS: 30,
+  MAX_IMAGE_UPLOAD_BYTES: 6 * 1024 * 1024,
 
   // Tehran geographic boundary (strictly Tehran city)
   TEHRAN_BOUNDS: {
@@ -72,7 +99,11 @@ export type ItemCategory =
 
 export interface CategoryMeta {
   id: ItemCategory;
+  slug: string;
   label: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoIntro: string;
   sensitive: boolean;
   safePointOnly: boolean;
   suggestedQuestions: string[];
@@ -81,7 +112,13 @@ export interface CategoryMeta {
 export const CATEGORIES: CategoryMeta[] = [
   {
     id: 'electronics',
+    slug: 'electronics',
     label: 'موبایل و لوازم الکترونیکی',
+    seoTitle: 'گوشی و لوازم الکترونیکی گمشده و پیدا‌شده در تهران | چی‌کجا',
+    seoDescription:
+      'جست‌وجو و ثبت موبایل، تبلت، هدفون و لوازم الکترونیکی گمشده یا پیدا‌شده در شهر تهران با احراز مالکیت ۳ پرسشی و تحویل امن در چی‌کجا.',
+    seoIntro:
+      'اگر گوشی موبایل، هدفون یا لپ‌تاپ خود را در مترو، تاکسی یا خیابان‌های تهران گم کرده‌اید یا وسیله الکترونیکی پیدا کرده‌اید، در چی‌کجا می‌توانید با حفظ حریم خصوصی و بدون نمایش شماره تماس مالک واقعی را شناسایی کنید.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -94,7 +131,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'bag',
+    slug: 'bag',
     label: 'کیف و کوله',
+    seoTitle: 'کیف و کوله‌پشتی گمشده و پیدا‌شده در تهران | چی‌کجا',
+    seoDescription:
+      'پیگیری کیف پول، کیف دوشی و کوله‌پشتی گمشده یا پیدا‌شده در محله‌ها و ایستگاه‌های متروی تهران در سامانه امن چی‌کجا.',
+    seoIntro:
+      'برای بازیابی کیف پول، کیف دستی یا کوله‌پشتی گمشده در تهران، محدوده تقریبی را روی نقشه انتخاب کنید و پس از پاسخ صحیح به ۳ پرسش محرمانه یابنده، تحویل را با پیک یا نقطه امن هماهنگ کنید.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -107,7 +150,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'keys',
+    slug: 'keys',
     label: 'کلید',
+    seoTitle: 'کلید، سوئیچ خودرو و ریموت گمشده در تهران | چی‌کجا',
+    seoDescription:
+      'یافتن دسته کلید، سوئیچ خودرو و ریموت پارکینگ گمشده و ثبت کلید پیدا‌شده در شهر تهران بدون افشای نشانی منزل.',
+    seoIntro:
+      'در چی‌کجا برای حفظ امنیت، تصاویر کلیدها پیش از تأیید مالکیت تار نمایش داده می‌شوند و نشانی منزل هرگز برای طرف مقابل افشا نمی‌شود.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -120,7 +169,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'id_documents',
+    slug: 'id-documents',
     label: 'مدارک شناسایی',
+    seoTitle: 'مدارک شناسایی گمشده و پیدا‌شده در تهران (تحویل نقطه امن) | چی‌کجا',
+    seoDescription:
+      'راهنمای پیگیری کارت ملی، گواهینامه، شناسنامه و گذرنامه گمشده یا پیدا‌شده در تهران؛ حفاظت‌شده و منحصراً با تحویل در نقاط امن تهران.',
+    seoIntro:
+      'برای حفاظت کامل از هویت شهروندان، آگهی‌های مدارک شناسایی در موتورهای جست‌وجو ایندکس نمی‌شوند، تصاویر آن‌ها پیش از تأیید به‌طور کامل پوشانده می‌شوند و تحویل آن‌ها منحصراً از طریق نقاط امن تهران انجام می‌گیرد.',
     sensitive: true,
     safePointOnly: true,
     suggestedQuestions: [
@@ -133,7 +188,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'bank_cards',
+    slug: 'bank-cards',
     label: 'کارت بانکی',
+    seoTitle: 'کارت بانکی گمشده و پیدا‌شده در تهران (تحویل نقطه امن) | چی‌کجا',
+    seoDescription:
+      'ثبت و پیگیری امن کارت بانکی پیدا‌شده در تهران با پوشاندن خودکار تصویر و الزام تحویل فقط از طریق نقاط امن چی‌کجا.',
+    seoIntro:
+      'اطلاعات کارت‌های بانکی حساس است؛ به همین دلیل در چی‌کجا هیچ جزئیاتی از کارت بانکی به‌صورت عمومی منتشر نمی‌شود و تحویل آن منحصراً در نقاط امن معتبر تهران با رسید دیجیتال انجام می‌شود.',
     sensitive: true,
     safePointOnly: true,
     suggestedQuestions: [
@@ -146,7 +207,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'jewelry_watch',
+    slug: 'jewelry-watch',
     label: 'ساعت و زیورآلات',
+    seoTitle: 'ساعت مچی و زیورآلات گمشده و پیدا‌شده در تهران | چی‌کجا',
+    seoDescription:
+      'جست‌وجو و ثبت ساعت مچی، انگشتر و زیورآلات گمشده یا پیدا‌شده در تهران با بررسی مالکیت ۳ پرسشی و تحویل امن با کد یک‌بارمصرف.',
+    seoIntro:
+      'ساعت مچی و زیورآلات پیدا‌شده در نقاط مختلف تهران را می‌توانید بر اساس محله و زمان تقریبی جست‌وجو کنید و پس از اثبات مالکیت با کد یک‌بارمصرف تحویل بگیرید.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -158,7 +225,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'clothing',
+    slug: 'clothing',
     label: 'پوشاک',
+    seoTitle: 'پوشاک و البسه گمشده و پیدا‌شده در تهران | چی‌کجا',
+    seoDescription:
+      'جست‌وجو و ثبت کت، کفش، عینک و پوشاک گمشده یا پیدا‌شده در مراکز خرید، پارک‌ها و متروی تهران در سامانه چی‌کجا.',
+    seoIntro:
+      'اگر لباس، کت، عینک یا کفش خود را در پارک‌ها، مراکز خرید یا حمل‌ونقل عمومی تهران جا گذاشته‌اید، محدوده را روی نقشه جست‌وجو کنید یا هشدار ۵ روزه ثبت نمایید.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -170,7 +243,13 @@ export const CATEGORIES: CategoryMeta[] = [
   },
   {
     id: 'other',
+    slug: 'other',
     label: 'سایر موارد',
+    seoTitle: 'سایر اشیای گمشده و پیدا‌شده در تهران | چی‌کجا',
+    seoDescription:
+      'جست‌وجو و ثبت سایر وسایل شخصی گمشده یا پیدا‌شده در سطح شهر تهران همراه با هشدار ۵ روزه و تحویل امن چی‌کجا.',
+    seoIntro:
+      'هر وسیله شخصی دیگری که در سطح شهر تهران گم شده یا پیدا شده است، در این بخش قابل ثبت و جست‌وجوست و پس از ۳ روز در صورت نیاز قابل ثبت مجدد است.',
     sensitive: false,
     safePointOnly: false,
     suggestedQuestions: [
@@ -184,6 +263,10 @@ export const CATEGORIES: CategoryMeta[] = [
 
 export const CATEGORY_MAP = new Map<ItemCategory, CategoryMeta>(
   CATEGORIES.map((c) => [c.id, c])
+);
+
+export const CATEGORY_BY_SLUG = new Map<string, CategoryMeta>(
+  CATEGORIES.map((c) => [c.slug, c])
 );
 
 export const SAFE_POINT_ONLY_CATEGORIES = new Set<ItemCategory>([

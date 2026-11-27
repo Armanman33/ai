@@ -306,19 +306,35 @@ async function runTests() {
     assert.equal(otherItem.status, 200);
     assert.equal((otherItem.json.item as { permanentlyBlocked: boolean }).permanentlyBlocked, false);
 
-    // Verify SMS was logged to finder upon claim submission
+    // Verify SMS was logged to finder with MASKED phone (never raw phone or plaintext OTP in sms_logs!)
     const db = getDb();
     const smsCount = (
       db
         .prepare(`SELECT COUNT(*) AS cnt FROM sms_logs WHERE recipient_phone = ? AND event_type = 'finder_claim_received'`)
-        .get('09121112233') as { cnt: number }
+        .get('0912***2233') as { cnt: number }
     ).cnt;
-    assert.ok(smsCount >= 1, 'Finder MUST receive SMS notification when claim is submitted');
+    assert.ok(smsCount >= 1, 'Finder MUST receive SMS notification (logged with masked phone)');
 
-    console.log('  ✓ 6. 3-strike permanent lockout (survives re-login, per-item isolation) & finder SMS passed');
+    const rawPhoneLeaks = (
+      db
+        .prepare(`SELECT COUNT(*) AS cnt FROM sms_logs WHERE recipient_phone = '09121112233'`)
+        .get() as { cnt: number }
+    ).cnt;
+    assert.equal(rawPhoneLeaks, 0, 'Raw unmasked phone number MUST NOT be stored in sms_logs');
+
+    const otpMessages = db
+      .prepare(`SELECT message FROM sms_logs WHERE event_type = 'auth_otp'`)
+      .all() as { message: string }[];
+    assert.ok(otpMessages.length >= 1);
+    for (const row of otpMessages) {
+      assert.ok(!/\d{5}/.test(row.message), 'Plaintext 5-digit OTP code MUST NEVER be stored in sms_logs');
+    }
+
+    console.log('  ✓ 6. 3-strike permanent lockout (survives re-login, per-item isolation) & privacy-safe finder SMS passed');
   }
 
   // 7. Real Owner verifies with 3 answers -> Chat (blocks phone numbers) -> Full Courier Delivery & Digital Receipt
+  let verifiedClaimId = '';
   {
     const verifyRes = await reqJson('POST', '/api/claims', {
       token: owner.token,
@@ -328,6 +344,7 @@ async function runTests() {
     assert.equal(verifyRes.status, 200);
     assert.equal(verifyRes.json.verified, true);
     const claimId = String(verifyRes.json.claimId);
+    verifiedClaimId = claimId;
 
     // Unverified attacker CANNOT read chat or claim room!
     const spyRoom = await reqJson('GET', `/api/claims/${claimId}`, { token: attacker.token });
@@ -532,10 +549,239 @@ async function runTests() {
     const blockedDetail = await reqJson('GET', `/api/items/${tempItemId}`, { token: owner.token });
     assert.equal(blockedDetail.status, 403);
 
+    // Unblock so subsequent tests remain clean
+    await reqJson('DELETE', `/api/safety/blocks/${finder.userId}`, { token: owner.token });
+
     console.log('  ✓ 9. 3-day ad / 5-day alert expiry, near-expiry alerts, re-list, report & block passed');
   }
 
-  console.log('\n✅ ALL 10 END-TO-END & SECURITY TEST SUITES PASSED 100%!');
+  // 10. Security Hardening: Health check, disguised malicious upload rejection, IDOR & delivery code rate limiting
+  {
+    const healthRes = await fetch(`${baseUrl}/api/health`);
+    assert.equal(healthRes.status, 200);
+    assert.ok((healthRes.headers.get('x-robots-tag') || '').includes('noindex'), 'API responses must carry X-Robots-Tag: noindex');
+    const healthJson = (await healthRes.json()) as { ok: boolean; checks: { database: string; storage: string } };
+    assert.equal(healthJson.ok, true);
+    assert.equal(healthJson.checks.database, 'ok');
+    assert.equal(healthJson.checks.storage, 'ok');
+
+    // Attempt to upload an HTML/script payload disguised as image/jpeg -> MUST be rejected by Sharp validation!
+    const fakeImgBlob = new Blob([Buffer.from('<html><script>alert(1)</script></html>')], {
+      type: 'image/jpeg',
+    });
+    const fdEvil = new FormData();
+    fdEvil.append('photo', fakeImgBlob, 'evil.jpg');
+    fdEvil.append('title', 'تست فایل مخرب');
+    fdEvil.append('category', 'other');
+    fdEvil.append('areaName', 'میدان ونک');
+    fdEvil.append('lat', '35.7575');
+    fdEvil.append('lng', '51.4100');
+    fdEvil.append('foundAt', new Date().toISOString());
+    fdEvil.append('deliveryMethod', 'courier');
+    fdEvil.append(
+      'questions',
+      JSON.stringify([
+        { question: 'سؤال اول تست؟', answer: 'جواب۱' },
+        { question: 'سؤال دوم تست؟', answer: 'جواب۲' },
+        { question: 'سؤال سوم تست؟', answer: 'جواب۳' },
+      ])
+    );
+    const evilRes = await reqJson('POST', '/api/items', { token: finder.token, formData: fdEvil });
+    assert.equal(evilRes.status, 400, 'Disguised non-image payload MUST be rejected by Sharp magic-byte check');
+
+    // IDOR: Third-party attacker cannot read private claim room or messages of owner/finder
+    const outsider = await loginUser('09128889900', 'کاربر ثالث');
+    const idorClaim = await reqJson('GET', `/api/claims/${verifiedClaimId}`, { token: outsider.token });
+    assert.equal(idorClaim.status, 403, 'Outsider MUST receive 403 on private claim room');
+    const idorChat = await reqJson('GET', `/api/claims/${verifiedClaimId}/messages`, { token: outsider.token });
+    assert.equal(idorChat.status, 403, 'Outsider MUST receive 403 on private chat messages');
+    const unauthProfile = await reqJson('GET', '/api/auth/me');
+    assert.equal(unauthProfile.status, 401, 'Unauthenticated request to /api/auth/me MUST return 401');
+
+    // Delivery one-time code brute-force rate limiting
+    const fdRate = new FormData();
+    fdRate.append('photo', photoBlob, 'watch.jpg');
+    fdRate.append('title', 'ساعت مچی برای تست محدودیت کد');
+    fdRate.append('category', 'jewelry_watch');
+    fdRate.append('areaName', 'سعادت‌آباد');
+    fdRate.append('lat', '35.7815');
+    fdRate.append('lng', '51.3751');
+    fdRate.append('foundAt', new Date().toISOString());
+    fdRate.append('deliveryMethod', 'safe_point');
+    fdRate.append('safePointId', 'sp-saadat-abad');
+    fdRate.append(
+      'questions',
+      JSON.stringify([
+        { question: 'برند ساعت چیست؟', answer: 'سیکو' },
+        { question: 'رنگ صفحه چیست؟', answer: 'مشکی' },
+        { question: 'جنس بند چیست؟', answer: 'چرم' },
+      ])
+    );
+    const rateItem = await reqJson('POST', '/api/items', { token: finder.token, formData: fdRate });
+    assert.equal(rateItem.status, 201);
+    const rateClaim = await reqJson('POST', '/api/claims', {
+      token: outsider.token,
+      body: { itemId: rateItem.json.itemId, answers: ['سیکو', 'مشکی', 'چرم'] },
+    });
+    assert.equal(rateClaim.status, 200);
+    const rateClaimId = String(rateClaim.json.claimId);
+
+    let hit429 = false;
+    for (let i = 0; i < 10; i++) {
+      const attempt = await reqJson('POST', `/api/deliveries/${rateClaimId}/confirm-safe-point-dropoff`, {
+        token: finder.token,
+        body: { code: '000001' },
+      });
+      if (attempt.status === 429) {
+        hit429 = true;
+        break;
+      }
+    }
+    assert.equal(hit429, true, 'Repeated wrong 6-digit delivery codes MUST trigger 429 rate limit');
+
+    // Standardized error shape on unknown API route
+    const api404 = await reqJson('GET', '/api/does-not-exist');
+    assert.equal(api404.status, 404);
+    assert.equal(api404.json.ok, false);
+    assert.equal(api404.json.code, 'NOT_FOUND');
+
+    console.log('  ✓ 10. Security hardening (health check, Sharp magic-byte check, IDOR, brute-force 429) passed');
+  }
+
+  // 11. Technical SEO, Sitemap Privacy Filtering, Robots.txt, Dynamic Meta & Real HTTP 404
+  {
+    // Create one public active non-sensitive item AND one active sensitive item (bank_card) + one demo item
+    const fdPub = new FormData();
+    fdPub.append('photo', photoBlob, 'public-item.jpg');
+    fdPub.append('title', 'عینک آفتابی پیدا شده در پارک ملت');
+    fdPub.append('category', 'clothing');
+    fdPub.append('areaName', 'پارک ملت');
+    fdPub.append('lat', '35.7782');
+    fdPub.append('lng', '51.4109');
+    fdPub.append('foundAt', new Date().toISOString());
+    fdPub.append('deliveryMethod', 'courier');
+    fdPub.append(
+      'questions',
+      JSON.stringify([
+        { question: 'برند عینک چیست؟', answer: 'ری‌بن' },
+        { question: 'رنگ فریم چیست؟', answer: 'طلایی' },
+        { question: 'رنگ قاب عینک چیست؟', answer: 'مشکی' },
+      ])
+    );
+    const pubCreated = await reqJson('POST', '/api/items', { token: finder.token, formData: fdPub });
+    assert.equal(pubCreated.status, 201);
+    const publicSeoItemId = String(pubCreated.json.itemId);
+
+    const fdSens = new FormData();
+    fdSens.append('photo', photoBlob, 'bank-card.jpg');
+    fdSens.append('title', 'کارت بانکی حساس در میدان تجریش');
+    fdSens.append('category', 'bank_cards');
+    fdSens.append('areaName', 'میدان تجریش');
+    fdSens.append('lat', '35.8044');
+    fdSens.append('lng', '51.4281');
+    fdSens.append('foundAt', new Date().toISOString());
+    fdSens.append('deliveryMethod', 'safe_point');
+    fdSens.append('safePointId', 'sp-tajrish');
+    fdSens.append(
+      'questions',
+      JSON.stringify([
+        { question: 'نام بانک چیست؟', answer: 'ملت' },
+        { question: 'نام دارنده چیست؟', answer: 'رضا محمدی' },
+        { question: 'چهار رقم آخر چیست؟', answer: '۱۲۳۴' },
+      ])
+    );
+    const sensCreated = await reqJson('POST', '/api/items', { token: finder.token, formData: fdSens });
+    assert.equal(sensCreated.status, 201);
+    const sensitiveSeoItemId = String(sensCreated.json.itemId);
+
+    // Check robots.txt
+    const robotsRes = await fetch(`${baseUrl}/robots.txt`);
+    assert.equal(robotsRes.status, 200);
+    const robotsText = await robotsRes.text();
+    assert.ok(robotsText.includes('Disallow: /api/'));
+    assert.ok(robotsText.includes('Disallow: /profile'));
+    assert.ok(robotsText.includes('Disallow: /claims/'));
+    assert.ok(robotsText.includes('Disallow: /auth'));
+    assert.ok(robotsText.includes('Sitemap:'));
+
+    // Check sitemap.xml & sitemap-index.xml
+    const sitemapRes = await fetch(`${baseUrl}/sitemap.xml`);
+    assert.equal(sitemapRes.status, 200);
+    const sitemapXml = await sitemapRes.text();
+    assert.ok(sitemapXml.includes('<urlset'));
+    assert.ok(sitemapXml.includes('/lost</loc>'));
+    assert.ok(sitemapXml.includes('/found</loc>'));
+    assert.ok(sitemapXml.includes('/category/electronics</loc>'));
+    assert.ok(sitemapXml.includes(`/items/${publicSeoItemId}</loc>`), 'Active non-sensitive public item must be in sitemap');
+    assert.ok(!sitemapXml.includes(sensitiveSeoItemId), 'Sensitive bank_cards item MUST NEVER appear in sitemap.xml');
+    assert.ok(!sitemapXml.includes(idItemId), 'Sensitive id_documents item MUST NEVER appear in sitemap.xml');
+    assert.ok(!sitemapXml.includes('/profile'), 'Private /profile MUST NEVER appear in sitemap.xml');
+    assert.ok(!sitemapXml.includes('/claims/'), 'Private /claims MUST NEVER appear in sitemap.xml');
+    assert.ok(!sitemapXml.includes('/auth'), 'Private /auth MUST NEVER appear in sitemap.xml');
+
+    const indexRes = await fetch(`${baseUrl}/sitemap-index.xml`);
+    assert.equal(indexRes.status, 200);
+    const indexXml = await indexRes.text();
+    assert.ok(indexXml.includes('sitemap-static.xml'));
+    assert.ok(indexXml.includes('sitemap-items.xml'));
+
+    // Check server-rendered dynamic SEO HTML (if client/dist exists)
+    const homeRes = await fetch(`${baseUrl}/`);
+    assert.equal(homeRes.status, 200);
+    const homeHtml = await homeRes.text();
+    assert.ok(homeHtml.includes('lang="fa-IR" dir="rtl"'));
+    assert.ok(homeHtml.includes('<title>چی‌کجا |'));
+    assert.equal((homeHtml.match(/<title>/g) || []).length, 1, 'HTML must have exactly one <title> tag');
+    assert.equal((homeHtml.match(/name="description"/g) || []).length, 1, 'HTML must have exactly one meta description');
+    assert.ok(homeHtml.includes('<link rel="canonical"'));
+    assert.ok(homeHtml.includes('application/ld+json'));
+    assert.ok(homeHtml.includes('FAQPage'));
+
+    const catRes = await fetch(`${baseUrl}/category/electronics`);
+    assert.equal(catRes.status, 200);
+    const catHtml = await catRes.text();
+    assert.ok(catHtml.includes('گوشی و لوازم الکترونیکی'));
+    assert.ok(catHtml.includes('/category/electronics'));
+
+    // Public non-sensitive item HTML -> index, follow and NO secret answer or phone leak
+    const pubItemRes = await fetch(`${baseUrl}/items/${publicSeoItemId}`);
+    assert.equal(pubItemRes.status, 200);
+    const pubItemHtml = await pubItemRes.text();
+    assert.ok(pubItemHtml.includes('content="index, follow"'));
+    assert.ok(pubItemHtml.includes('عینک آفتابی پیدا شده در پارک ملت'));
+    assert.ok(!pubItemHtml.includes('ری‌بن'), 'Secret answer MUST NEVER leak into SSR HTML');
+    assert.ok(!pubItemHtml.includes('09121112233'), 'Phone number MUST NEVER leak into SSR HTML');
+
+    // Sensitive bank card item HTML -> MUST be noindex & generic title
+    const sensItemRes = await fetch(`${baseUrl}/items/${sensitiveSeoItemId}`);
+    assert.equal(sensItemRes.status, 200);
+    assert.ok((sensItemRes.headers.get('x-robots-tag') || '').includes('noindex'));
+    const sensItemHtml = await sensItemRes.text();
+    assert.ok(sensItemHtml.includes('noindex, nofollow, noarchive'));
+    assert.ok(!sensItemHtml.includes('کارت بانکی حساس در میدان تجریش'), 'Sensitive item title MUST NOT leak into public meta/title');
+
+    // Private route HTML -> MUST carry noindex + X-Robots-Tag
+    const profileHtmlRes = await fetch(`${baseUrl}/profile`);
+    assert.equal(profileHtmlRes.status, 200);
+    assert.ok((profileHtmlRes.headers.get('x-robots-tag') || '').includes('noindex'));
+    const profileHtml = await profileHtmlRes.text();
+    assert.ok(profileHtml.includes('noindex, nofollow, noarchive'));
+
+    // Trailing slash canonical 301 redirect
+    const slashRes = await fetch(`${baseUrl}/lost/`, { redirect: 'manual' });
+    assert.equal(slashRes.status, 301);
+    assert.equal(slashRes.headers.get('location'), '/lost');
+
+    // Real HTTP 404 on unknown route & non-existent item (no Soft-404!)
+    const notFoundRoute = await fetch(`${baseUrl}/this-route-does-not-exist-404`);
+    assert.equal(notFoundRoute.status, 404);
+    const notFoundItem = await fetch(`${baseUrl}/items/non-existent-item-999`);
+    assert.equal(notFoundItem.status, 404);
+
+    console.log('  ✓ 11. Technical SEO (robots.txt, sitemap privacy, dynamic meta/JSON-LD, noindex, 301, real 404) passed');
+  }
+
+  console.log('\n✅ ALL 11 END-TO-END, SECURITY & SEO TEST SUITES PASSED 100%!');
   } finally {
     if (server) server.close();
     closeDb();

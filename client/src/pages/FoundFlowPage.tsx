@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { ItemCategory } from '../types';
 import { TehranMap } from '../components/TehranMap';
 import { LoadingSkeleton, PageHeader } from '../components/StateViews';
@@ -29,6 +30,13 @@ export const FoundFlowPage: React.FC = () => {
   const { meta, user, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'پیدا کرده‌ام | ثبت سریع شیء پیدا شده در تهران — چی‌کجا',
+    description:
+      'وسیله‌ای در تهران پیدا کرده‌اید؟ در کمتر از یک دقیقه بدون نمایش شماره تماس و با ۳ پرسش محرمانه آن را در چی‌کجا ثبت کنید و امن با پیک یا نقطه امن تحویل دهید.',
+    canonicalPath: '/found',
+  });
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 

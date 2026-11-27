@@ -11,6 +11,7 @@ import {
   Inbox,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { NotificationItem } from '../types';
@@ -47,6 +48,13 @@ export const NotificationsPage: React.FC = () => {
   const { user, loading: authLoading, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'اعلان‌های حساب کاربری | چی‌کجا',
+    description: 'مشاهده اعلان‌های سامانه اشیای گمشده چی‌کجا.',
+    canonicalPath: '/notifications',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { usePageSeo } from '../lib/seo';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { LostAlertItem } from '../types';
@@ -26,6 +27,13 @@ export const MyAlertsPage: React.FC = () => {
   const { user, loading: authLoading, refreshMe } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  usePageSeo({
+    title: 'هشدارهای گم‌شدن من | چی‌کجا',
+    description: 'پیگیری هشدارهای ۵ روزه اشیای گمشده در حساب کاربری چی‌کجا.',
+    canonicalPath: '/my-alerts',
+    robots: 'noindex, nofollow, noarchive',
+  });
 
   const [alerts, setAlerts] = useState<LostAlertItem[]>([]);
   const [loading, setLoading] = useState(true);

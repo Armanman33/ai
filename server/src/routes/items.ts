@@ -53,6 +53,13 @@ const createItemLimiter = createRateLimiter({
   message: 'تعداد ثبت آگهی در بازه کوتاه بیش از حد مجاز است. لطفاً کمی بعد تلاش کنید.',
 });
 
+const searchItemsLimiter = createRateLimiter({
+  keyPrefix: 'search-items',
+  windowMs: 60 * 1000,
+  max: 120,
+  message: 'تعداد درخواست‌های جست‌وجو بیش از حد مجاز است. لطفاً لحظاتی صبر کنید.',
+});
+
 interface FoundItemRow {
   id: string;
   finder_id: string;
@@ -108,7 +115,7 @@ function isTimeSlotMatch(foundAtIso: string, lostDate: string | undefined, timeS
  * Public/Authenticated search of active found items in Tehran.
  * Never reveals finder phone, exact unverified coordinates, secret answers, or unblurred photos.
  */
-itemsRouter.get('/search', (req, res) => {
+itemsRouter.get('/search', searchItemsLimiter, (req, res) => {
   runLifecycleSweep();
   const db = getDb();
   const viewerId = req.user?.id || null;
@@ -317,37 +324,41 @@ itemsRouter.get('/mine', requireAuth, (req, res) => {
  * Signed image streaming endpoint — enforces real server-side blurring before ownership verification
  */
 itemsRouter.get('/:id/image', (req, res) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const mode = req.query.mode === 'full' ? 'full' : 'blurred';
   const exp = typeof req.query.exp === 'string' ? req.query.exp : '';
   const sig = typeof req.query.sig === 'string' ? req.query.sig : '';
 
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+
   if (!verifyImageSignature(id, mode, exp, sig)) {
-    res.status(403).json({ error: 'دسترسی غیرمجاز به تصویر.' });
+    res.status(403).json({ ok: false, error: 'دسترسی غیرمجاز به تصویر.', code: 'FORBIDDEN_IMAGE' });
     return;
   }
 
   const db = getDb();
   const row = db
-    .prepare(`SELECT image_path, blurred_image_path FROM found_items WHERE id = ?`)
+    .prepare(`SELECT image_path, blurred_image_path FROM found_items WHERE id = ? AND status != 'removed'`)
     .get(id) as { image_path: string; blurred_image_path: string } | undefined;
 
   if (!row) {
-    res.status(404).json({ error: 'تصویر یافت نشد.' });
+    res.status(404).json({ ok: false, error: 'تصویر یافت نشد.', code: 'IMAGE_NOT_FOUND' });
     return;
   }
 
   const relPath = mode === 'full' ? row.image_path : row.blurred_image_path;
-  const absPath = path.resolve(STORAGE_DIR, relPath);
+  const resolvedStorageRoot = path.resolve(STORAGE_DIR);
+  const absPath = path.resolve(resolvedStorageRoot, relPath);
 
-  // Prevent path traversal outside STORAGE_DIR
-  if (!absPath.startsWith(STORAGE_DIR) || !fs.existsSync(absPath)) {
-    res.status(404).json({ error: 'فایل تصویر یافت نشد.' });
+  // Strict path traversal guard (using path.sep so /storage-evil never matches /storage)
+  if (!absPath.startsWith(resolvedStorageRoot + path.sep) || !fs.existsSync(absPath)) {
+    res.status(404).json({ ok: false, error: 'فایل تصویر یافت نشد.', code: 'IMAGE_FILE_MISSING' });
     return;
   }
 
   res.setHeader('Content-Type', 'image/jpeg');
-  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Cache-Control', mode === 'full' ? 'private, no-store' : 'private, max-age=300');
   fs.createReadStream(absPath).pipe(res);
 });
 
@@ -504,7 +515,7 @@ itemsRouter.post(
   requireAuth,
   createItemLimiter,
   upload.single('photo'),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       if (!req.file) {
         res.status(400).json({ error: 'بارگذاری عکس شیء پیدا شده الزامی است.' });
@@ -646,8 +657,7 @@ itemsRouter.post(
         matchedAlerts,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'خطا در ثبت آگهی. لطفاً دوباره تلاش کنید.';
-      res.status(400).json({ error: msg });
+      next(err);
     }
   }
 );

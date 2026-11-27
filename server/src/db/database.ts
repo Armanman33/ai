@@ -14,12 +14,51 @@ export function getDb(): DatabaseSync {
   if (!dbInstance) {
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     dbInstance = new DatabaseSync(DB_PATH);
+    // Production SQLite concurrency & durability settings (WAL + busy_timeout)
+    dbInstance.exec(`
+      PRAGMA foreign_keys = ON;
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA temp_store = MEMORY;
+    `);
     const schemaPath = path.join(__dirname, 'schema.sql');
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
     dbInstance.exec(schemaSql);
     ensureSafePoints(dbInstance);
   }
   return dbInstance;
+}
+
+/**
+ * Executes a callback inside an atomic SQLite IMMEDIATE transaction
+ * to prevent concurrent race conditions (e.g., 3-strike bypass or double claims).
+ */
+export function runInTransaction<T>(fn: (db: DatabaseSync) => T): T {
+  const db = getDb();
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const result = fn(db);
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // ignore rollback error if transaction already closed
+    }
+    throw err;
+  }
+}
+
+export function checkDbHealth(): { ok: boolean; error?: string } {
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT 1 AS alive').get() as { alive: number } | undefined;
+    return { ok: row?.alive === 1 };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'DB health error' };
+  }
 }
 
 function ensureSafePoints(db: DatabaseSync): void {
@@ -38,6 +77,11 @@ function ensureSafePoints(db: DatabaseSync): void {
 
 export function closeDb(): void {
   if (dbInstance) {
+    try {
+      dbInstance.exec('PRAGMA wal_checkpoint(PASSIVE);');
+    } catch {
+      // ignore checkpoint error on shutdown
+    }
     dbInstance.close();
     dbInstance = null;
   }
