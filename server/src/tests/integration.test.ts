@@ -66,7 +66,7 @@ async function makeSamplePhotoBlob(): Promise<Blob> {
 async function runTests() {
   const { createApp } = await import('../index.js');
   const { closeDb, getDb } = await import('../db/database.js');
-  const { runLifecycleSweep } = await import('../services/lifecycleService.js');
+  const { runLifecycleSweep, runStorageCleanup } = await import('../services/lifecycleService.js');
 
   getDb();
   const app = createApp();
@@ -781,7 +781,166 @@ async function runTests() {
     console.log('  ✓ 11. Technical SEO (robots.txt, sitemap privacy, dynamic meta/JSON-LD, noindex, 301, real 404) passed');
   }
 
-  console.log('\n✅ ALL 11 END-TO-END, SECURITY & SEO TEST SUITES PASSED 100%!');
+  // 12. Automatic Retention Cleanup, Image Garbage Collection & SQLite Compaction
+  {
+    const db = getDb();
+    const createTestItem = async (title: string) => {
+      const fd = new FormData();
+      fd.append('photo', photoBlob, 'cleanup-item.jpg');
+      fd.append('title', title);
+      fd.append('category', 'other');
+      fd.append('areaName', 'میدان ونک');
+      fd.append('lat', '35.7575');
+      fd.append('lng', '51.4100');
+      fd.append('foundAt', new Date().toISOString());
+      fd.append('deliveryMethod', 'courier');
+      fd.append(
+        'questions',
+        JSON.stringify([
+          { question: 'رنگ شیء چیست؟', answer: 'آبی' },
+          { question: 'جنس شیء چیست؟', answer: 'پلاستیک' },
+          { question: 'علامت خاص آن چیست؟', answer: 'برچسب ستاره' },
+        ])
+      );
+      const res = await reqJson('POST', '/api/items', { token: owner.token, formData: fd });
+      assert.equal(res.status, 201);
+      const itemId = String(res.json.itemId);
+      const paths = db
+        .prepare(`SELECT image_path, blurred_image_path FROM found_items WHERE id = ?`)
+        .get(itemId) as { image_path: string; blurred_image_path: string };
+      return {
+        itemId,
+        fullAbs: path.join(tmpDir, paths.image_path),
+        blurAbs: path.join(tmpDir, paths.blurred_image_path),
+      };
+    };
+
+    // 12a. Immediate disk cleanup when user deletes an item
+    const deletedNow = await createTestItem('چتر برای تست حذف فوری فایل');
+    assert.equal(fs.existsSync(deletedNow.fullAbs), true);
+    assert.equal(fs.existsSync(deletedNow.blurAbs), true);
+    const delRes = await reqJson('DELETE', `/api/items/${deletedNow.itemId}`, { token: owner.token });
+    assert.equal(delRes.status, 200);
+    assert.equal(fs.existsSync(deletedNow.fullAbs), false, 'Full image must be deleted immediately on DELETE /api/items/:id');
+    assert.equal(fs.existsSync(deletedNow.blurAbs), false, 'Blurred image must be deleted immediately on DELETE /api/items/:id');
+
+    // Backdate the removed row > 2 days so cleanup purges the DB row too
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(`UPDATE found_items SET updated_at = ? WHERE id = ?`).run(twoDaysAgo, deletedNow.itemId);
+
+    // 12b. Expired item WITHIN 7-day relist grace window must be kept (files + DB row)
+    const recentExpired = await createTestItem('فلاسک منقضی‌شده در مهلت ثبت مجدد');
+    db.prepare(`UPDATE found_items SET status = 'expired', expires_at = ?, updated_at = ? WHERE id = ?`).run(
+      twoDaysAgo,
+      twoDaysAgo,
+      recentExpired.itemId
+    );
+
+    // 12c. Expired item PAST 7-day grace window must be auto-purged (DB row + questions + disk files)
+    const oldExpired = await createTestItem('دفترچه منقضی‌شده قدیمی برای پاک‌سازی خودکار');
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(`UPDATE found_items SET status = 'expired', expires_at = ?, updated_at = ? WHERE id = ?`).run(
+      tenDaysAgo,
+      tenDaysAgo,
+      oldExpired.itemId
+    );
+
+    // 12d. Expired item past 7 days WITH an active pending_review claim must NOT be purged
+    const protectedExpired = await createTestItem('شیء منقضی‌شده با ادعای در انتظار بررسی');
+    db.prepare(`UPDATE found_items SET status = 'expired', expires_at = ?, updated_at = ? WHERE id = ?`).run(
+      tenDaysAgo,
+      tenDaysAgo,
+      protectedExpired.itemId
+    );
+    db.prepare(`
+      INSERT INTO ownership_claims (id, item_id, loser_id, finder_id, status, answers_json, attempt_number, created_at, updated_at)
+      VALUES ('claim-protect-1', ?, ?, ?, 'pending_review', '[]', 1, ?, ?)
+    `).run(protectedExpired.itemId, attacker.userId, owner.userId, tenDaysAgo, tenDaysAgo);
+
+    // 12e. Archived delivered item > 30 days old must be purged along with its images
+    const oldDelivered = await createTestItem('ساعت تحویل‌شده قدیمی');
+    const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(`UPDATE found_items SET status = 'delivered', updated_at = ? WHERE id = ?`).run(
+      fortyDaysAgo,
+      oldDelivered.itemId
+    );
+
+    // 12f. Old expired alert (> 7 days) + old sms_logs & read notifications (> 30 days)
+    db.prepare(`
+      INSERT INTO lost_alerts (id, user_id, title, category, area_name, lat, lng, radius_meters, lost_date, time_slot, status, expires_at, near_expiry_notified, relist_count, is_demo, created_at, updated_at)
+      VALUES ('old-expired-alert', ?, 'هشدار قدیمی', 'keys', 'ونک', 35.7575, 51.4100, 1500, '2026-01-01', 'all_day', 'expired', ?, 1, 0, 0, ?, ?)
+    `).run(owner.userId, tenDaysAgo, tenDaysAgo, tenDaysAgo);
+    db.prepare(`
+      INSERT INTO sms_logs (id, recipient_phone, event_type, message, provider, status, created_at)
+      VALUES ('old-sms-log', '0912***9999', 'otp', 'redacted', 'sandbox', 'sent', ?)
+    `).run(fortyDaysAgo);
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, type, title, body, link_path, metadata_json, is_read, created_at)
+      VALUES ('old-read-notif', ?, 'item_expired', 'قدیمی', 'قدیمی', '/', '{}', 1, ?)
+    `).run(finder.userId, fortyDaysAgo);
+
+    // 12g. Orphan image files: 1 stale orphan (> grace) MUST be deleted, 1 brand-new orphan MUST be preserved
+    const staleOrphanUpload = path.join(tmpDir, 'uploads', 'orphan-stale.jpg');
+    const staleOrphanPreview = path.join(tmpDir, 'previews', 'orphan-stale_blur.jpg');
+    const freshInFlightUpload = path.join(tmpDir, 'uploads', 'inflight-fresh.jpg');
+    fs.writeFileSync(staleOrphanUpload, 'stale-orphan');
+    fs.writeFileSync(staleOrphanPreview, 'stale-preview');
+    fs.writeFileSync(freshInFlightUpload, 'fresh-inflight');
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    fs.utimesSync(staleOrphanUpload, thirtyMinAgo, thirtyMinAgo);
+    fs.utimesSync(staleOrphanPreview, thirtyMinAgo, thirtyMinAgo);
+
+    const stats = runStorageCleanup({ forceOrphanScan: true, forceCompact: true });
+
+    // Verify old expired item & its disk files & cascaded questions are completely purged
+    assert.equal(stats.purgedExpiredItems >= 1, true);
+    assert.equal(db.prepare(`SELECT id FROM found_items WHERE id = ?`).get(oldExpired.itemId), undefined);
+    assert.equal(
+      (db.prepare(`SELECT COUNT(*) AS cnt FROM item_questions WHERE item_id = ?`).get(oldExpired.itemId) as { cnt: number }).cnt,
+      0
+    );
+    assert.equal(fs.existsSync(oldExpired.fullAbs), false, 'Old expired full image must be purged from disk');
+    assert.equal(fs.existsSync(oldExpired.blurAbs), false, 'Old expired blurred image must be purged from disk');
+
+    // Verify recent expired item (within 7-day grace window) is STILL intact for relisting
+    assert.ok(db.prepare(`SELECT id FROM found_items WHERE id = ?`).get(recentExpired.itemId));
+    assert.equal(fs.existsSync(recentExpired.fullAbs), true);
+    assert.equal(fs.existsSync(recentExpired.blurAbs), true);
+
+    // Verify expired item with pending_review claim was protected
+    assert.ok(db.prepare(`SELECT id FROM found_items WHERE id = ?`).get(protectedExpired.itemId));
+    assert.equal(fs.existsSync(protectedExpired.fullAbs), true);
+
+    // Verify old removed & delivered rows + delivered images are purged
+    assert.equal(stats.purgedRemovedItems >= 1, true);
+    assert.equal(db.prepare(`SELECT id FROM found_items WHERE id = ?`).get(deletedNow.itemId), undefined);
+    assert.equal(stats.purgedDeliveredItems >= 1, true);
+    assert.equal(db.prepare(`SELECT id FROM found_items WHERE id = ?`).get(oldDelivered.itemId), undefined);
+    assert.equal(fs.existsSync(oldDelivered.fullAbs), false);
+    assert.equal(fs.existsSync(oldDelivered.blurAbs), false);
+
+    // Verify old expired alert, sms_log, and read notification are purged
+    assert.equal(stats.purgedAlerts >= 1, true);
+    assert.equal(db.prepare(`SELECT id FROM lost_alerts WHERE id = 'old-expired-alert'`).get(), undefined);
+    assert.equal(db.prepare(`SELECT id FROM sms_logs WHERE id = 'old-sms-log'`).get(), undefined);
+    assert.equal(db.prepare(`SELECT id FROM notifications WHERE id = 'old-read-notif'`).get(), undefined);
+
+    // Verify orphan GC deleted stale orphans but preserved fresh in-flight upload
+    assert.equal(stats.deletedOrphanFiles, 2);
+    assert.equal(fs.existsSync(staleOrphanUpload), false);
+    assert.equal(fs.existsSync(staleOrphanPreview), false);
+    assert.equal(fs.existsSync(freshInFlightUpload), true, 'Brand-new in-flight upload must NOT be deleted by orphan GC');
+
+    // Verify SQLite WAL checkpoint ran cleanly & DB still healthy
+    assert.equal(stats.walCheckpointed, true);
+    const healthAfter = await reqJson('GET', '/api/health');
+    assert.equal(healthAfter.status, 200);
+    assert.equal(healthAfter.json.ok, true);
+
+    console.log('  ✓ 12. Automatic cleanup (expired/removed/delivered purge, image GC, orphan GC, SQLite compaction) passed');
+  }
+
+  console.log('\n✅ ALL 12 END-TO-END, SECURITY, SEO & STORAGE CLEANUP TEST SUITES PASSED 100%!');
   } finally {
     if (server) server.close();
     closeDb();

@@ -44,6 +44,13 @@ function normalizeSiteUrl(raw: string | undefined): string {
   return raw.trim().replace(/\/+$/, '');
 }
 
+function parsePositiveNumber(raw: string | undefined, fallback: number, min = 0): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < min) return fallback;
+  return parsed;
+}
+
 const seedDemoEnv = process.env.SEED_DEMO_DATA;
 // In production, demo seeding defaults to OFF unless explicitly set to 'true'.
 // In development, demo seeding defaults to ON unless explicitly set to 'false'.
@@ -75,6 +82,14 @@ export const CONFIG = {
   OTP_COOLDOWN_SECONDS: Number(process.env.OTP_COOLDOWN_SECONDS ?? (IS_PRODUCTION ? 45 : 0)),
   SESSION_TTL_DAYS: 30,
   MAX_IMAGE_UPLOAD_BYTES: 6 * 1024 * 1024,
+
+  // Automatic retention & disk garbage-collection policies (prevents unbounded disk/DB growth)
+  EXPIRED_ITEM_PURGE_DAYS: parsePositiveNumber(process.env.EXPIRED_ITEM_PURGE_DAYS, 7, 1),
+  REMOVED_ITEM_PURGE_DAYS: parsePositiveNumber(process.env.REMOVED_ITEM_PURGE_DAYS, 1, 0),
+  DELIVERED_ITEM_PURGE_DAYS: parsePositiveNumber(process.env.DELIVERED_ITEM_PURGE_DAYS, 30, 1),
+  EXPIRED_ALERT_PURGE_DAYS: parsePositiveNumber(process.env.EXPIRED_ALERT_PURGE_DAYS, 7, 1),
+  LOG_RETENTION_DAYS: parsePositiveNumber(process.env.LOG_RETENTION_DAYS, 30, 1),
+  ORPHAN_FILE_GRACE_MINUTES: parsePositiveNumber(process.env.ORPHAN_FILE_GRACE_MINUTES, 10, 1),
 
   // Tehran geographic boundary (strictly Tehran city)
   TEHRAN_BOUNDS: {

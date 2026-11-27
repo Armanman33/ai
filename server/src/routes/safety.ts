@@ -4,6 +4,7 @@ import { getDb, nowIso } from '../db/database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { logStatusChange } from '../services/auditService.js';
 import { generateId } from '../utils/crypto.js';
+import { deleteItemImageFiles } from '../utils/imageBlur.js';
 import { createRateLimiter } from '../utils/rateLimit.js';
 
 export const safetyRouter = Router();
@@ -37,8 +38,17 @@ safetyRouter.post('/report', requireAuth, reportLimiter, (req, res) => {
 
   const db = getDb();
   const item = db
-    .prepare(`SELECT id, finder_id, status FROM found_items WHERE id = ?`)
-    .get(parsed.data.itemId) as { id: string; finder_id: string; status: string } | undefined;
+    .prepare(`SELECT id, finder_id, status, image_path, blurred_image_path, is_demo FROM found_items WHERE id = ?`)
+    .get(parsed.data.itemId) as
+    | {
+        id: string;
+        finder_id: string;
+        status: string;
+        image_path: string;
+        blurred_image_path: string;
+        is_demo: number;
+      }
+    | undefined;
 
   if (!item) {
     res.status(404).json({ error: 'آگهی موردنظر یافت نشد.' });
@@ -80,13 +90,16 @@ safetyRouter.post('/report', requireAuth, reportLimiter, (req, res) => {
 
   if (reportCount >= 3 && item.status === 'active') {
     db.prepare(`UPDATE found_items SET status = 'removed', updated_at = ? WHERE id = ?`).run(nowStr, item.id);
+    if (!item.is_demo) {
+      deleteItemImageFiles(item.image_path, item.blurred_image_path);
+    }
     logStatusChange({
       entityType: 'item',
       entityId: item.id,
       actorRole: 'system',
       fromStatus: 'active',
       toStatus: 'removed',
-      note: 'حذف خودکار آگهی به دلیل دریافت ۳ گزارش تخلف',
+      note: 'حذف خودکار آگهی و تصاویر به دلیل دریافت ۳ گزارش تخلف',
     });
   }
 

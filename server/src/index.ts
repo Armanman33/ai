@@ -17,7 +17,7 @@ import { notificationsRouter } from './routes/notifications.js';
 import { safetyRouter } from './routes/safety.js';
 import { ensureDemoDataSeeded } from './seed/demoData.js';
 import { seoRouter, serveSeoAwareSpa } from './seo/seoMiddleware.js';
-import { startLifecycleScheduler } from './services/lifecycleService.js';
+import { startLifecycleScheduler, stopLifecycleScheduler } from './services/lifecycleService.js';
 import { AppError, formatErrorResponse } from './utils/errors.js';
 import { logger } from './utils/logger.js';
 
@@ -177,6 +177,7 @@ async function bootstrap() {
   // Graceful shutdown for PM2 / Systemd / VPS restarts (zero DB corruption)
   const shutdown = (signal: string) => {
     logger.info('server_shutting_down', { signal });
+    stopLifecycleScheduler();
     server.close(() => {
       closeDb();
       process.exit(0);

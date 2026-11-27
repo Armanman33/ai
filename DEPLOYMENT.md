@@ -220,6 +220,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 | --- | --- | --- |
 | احراز هویت OTP، نشست، قفل ۳ اشتباه، چت، تحویل، رسید دیجیتال | **عملیاتی و واقعی** | تنظیم `.env` و `APP_SECRET` |
 | پردازش و تار کردن واقعی تصاویر (Sharp + EXIF strip + امضای HMAC) | **عملیاتی و واقعی** | مجوز نوشتن در `STORAGE_DIR` |
+| پاک‌سازی خودکار آگهی‌های قدیمی، تصاویر و فشرده‌سازی دیسک SQLite | **عملیاتی و خودکار (هر ۶۰ ثانیه)** | قابل تنظیم با متغیرهای `*_PURGE_DAYS` و `LOG_RETENTION_DAYS` در `.env` |
 | SEO تکنیکال (`robots.txt`، `sitemap.xml`، متای پویا، Canonical، ۴۰۴ واقعی) | **عملیاتی و واقعی** | تنظیم `PUBLIC_SITE_URL` و ثبت در Search Console |
 | ارسال پیامک واقعی (SMS) | **آداپتور کاوه‌نگار آماده است / حالت پیش‌فرض Sandbox** | خرید سرویس و تنظیم `SMS_PROVIDER=kavenegar` و `KAVENEGAR_API_KEY` |
 | کاشی نقشه تهران (Map Tiles) | **OpenStreetMap پیش‌فرض + Fallback برداری** | در صورت نیاز به سرویس داخلی ایران، تنظیم `VITE_MAP_TILE_URL` |

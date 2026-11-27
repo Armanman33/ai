@@ -27,7 +27,7 @@ import {
   haversineDistanceMeters,
   isInsideTehran,
 } from '../utils/geo.js';
-import { processAndStoreItemImage } from '../utils/imageBlur.js';
+import { deleteItemImageFiles, processAndStoreItemImage } from '../utils/imageBlur.js';
 import { normalizePersianText } from '../utils/persian.js';
 import { createRateLimiter } from '../utils/rateLimit.js';
 
@@ -589,45 +589,51 @@ itemsRouter.post(
       const nowStr = now.toISOString();
       const expiresAt = addDaysIso(now, CONFIG.FOUND_ITEM_TTL_DAYS);
 
-      db.prepare(`
-        INSERT INTO found_items (
-          id, finder_id, title, category, description, area_name, lat, lng, found_at,
-          image_path, blurred_image_path, delivery_method, safe_point_id,
-          status, expires_at, near_expiry_notified, relist_count, is_demo, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 0, 0, 0, ?, ?)
-      `).run(
-        itemId,
-        req.user!.id,
-        data.title,
-        data.category,
-        data.description,
-        data.areaName,
-        data.lat,
-        data.lng,
-        foundDate.toISOString(),
-        processedImg.imagePath,
-        processedImg.blurredImagePath,
-        data.deliveryMethod,
-        validatedSafePointId,
-        expiresAt,
-        nowStr,
-        nowStr
-      );
-
-      const qStmt = db.prepare(`
-        INSERT INTO item_questions (id, item_id, question_index, question_text, answer_encrypted, answer_normalized)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      data.questions.forEach((q, idx) => {
-        qStmt.run(
-          generateId(),
+      try {
+        db.prepare(`
+          INSERT INTO found_items (
+            id, finder_id, title, category, description, area_name, lat, lng, found_at,
+            image_path, blurred_image_path, delivery_method, safe_point_id,
+            status, expires_at, near_expiry_notified, relist_count, is_demo, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 0, 0, 0, ?, ?)
+        `).run(
           itemId,
-          idx + 1,
-          q.question,
-          encryptText(q.answer),
-          normalizePersianText(q.answer)
+          req.user!.id,
+          data.title,
+          data.category,
+          data.description,
+          data.areaName,
+          data.lat,
+          data.lng,
+          foundDate.toISOString(),
+          processedImg.imagePath,
+          processedImg.blurredImagePath,
+          data.deliveryMethod,
+          validatedSafePointId,
+          expiresAt,
+          nowStr,
+          nowStr
         );
-      });
+
+        const qStmt = db.prepare(`
+          INSERT INTO item_questions (id, item_id, question_index, question_text, answer_encrypted, answer_normalized)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        data.questions.forEach((q, idx) => {
+          qStmt.run(
+            generateId(),
+            itemId,
+            idx + 1,
+            q.question,
+            encryptText(q.answer),
+            normalizePersianText(q.answer)
+          );
+        });
+      } catch (dbErr) {
+        // Prevent orphaned image files if DB insert fails after image processing
+        deleteItemImageFiles(processedImg.imagePath, processedImg.blurredImagePath);
+        throw dbErr;
+      }
 
       logStatusChange({
         entityType: 'item',
@@ -736,8 +742,17 @@ itemsRouter.delete('/:id', requireAuth, (req, res) => {
   const id = String(req.params.id);
 
   const row = db
-    .prepare(`SELECT id, finder_id, status FROM found_items WHERE id = ?`)
-    .get(id) as { id: string; finder_id: string; status: string } | undefined;
+    .prepare(`SELECT id, finder_id, status, image_path, blurred_image_path, is_demo FROM found_items WHERE id = ?`)
+    .get(id) as
+    | {
+        id: string;
+        finder_id: string;
+        status: string;
+        image_path: string;
+        blurred_image_path: string;
+        is_demo: number;
+      }
+    | undefined;
 
   if (!row) {
     res.status(404).json({ error: 'آگهی یافت نشد.' });
@@ -753,6 +768,19 @@ itemsRouter.delete('/:id', requireAuth, (req, res) => {
   }
 
   db.prepare(`UPDATE found_items SET status = 'removed', updated_at = ? WHERE id = ?`).run(nowIso(), id);
+
+  // Free disk space immediately by removing uploaded + blurred images (never touching demo assets)
+  if (!row.is_demo) {
+    const stillReferenced = db
+      .prepare(
+        `SELECT 1 FROM found_items WHERE id != ? AND status != 'removed' AND (image_path = ? OR blurred_image_path = ?) LIMIT 1`
+      )
+      .get(id, row.image_path, row.blurred_image_path);
+    if (!stillReferenced) {
+      deleteItemImageFiles(row.image_path, row.blurred_image_path);
+    }
+  }
+
   logStatusChange({
     entityType: 'item',
     entityId: id,
@@ -760,7 +788,7 @@ itemsRouter.delete('/:id', requireAuth, (req, res) => {
     actorRole: 'finder',
     fromStatus: row.status,
     toStatus: 'removed',
-    note: 'حذف آگهی توسط یابنده',
+    note: 'حذف آگهی توسط یابنده و آزادسازی فایل‌های تصویر',
   });
 
   res.json({ ok: true });

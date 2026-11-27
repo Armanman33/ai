@@ -179,6 +179,12 @@ export const MyAdsPage: React.FC = () => {
                         <span>{rem.label}</span>
                       </div>
                     )}
+
+                    {item.status === 'expired' && (
+                      <div className="text-[11px] font-medium text-red-700 pt-0.5">
+                        تا ۷ روز پس از انقضا قابل ثبت مجدد است؛ پس از آن به‌صورت خودکار و دائمی حذف می‌شود.
+                      </div>
+                    )}
                   </div>
                 </div>
 

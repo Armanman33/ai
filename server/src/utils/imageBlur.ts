@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import sharp from 'sharp';
-import { PREVIEWS_DIR, UPLOADS_DIR } from '../config.js';
+import { PREVIEWS_DIR, STORAGE_DIR, UPLOADS_DIR } from '../config.js';
 import { generateId } from './crypto.js';
 import { AppError } from './errors.js';
 
@@ -128,3 +128,48 @@ export async function createBlurredPreview(
 
   await pipeline.jpeg({ quality: 72, progressive: true }).toFile(destAbs);
 }
+
+/**
+ * Safely deletes a single user-uploaded or blurred-preview image inside
+ * storage/uploads/ or storage/previews/. Strictly refuses to touch demo/,
+ * database files, secrets, or anything outside those two directories.
+ */
+export function deleteStoredImageFile(relPath: string | null | undefined): boolean {
+  if (!relPath || typeof relPath !== 'string') return false;
+  const trimmed = relPath.trim();
+  if (!trimmed || trimmed.startsWith('demo/') || trimmed.startsWith('demo\\')) {
+    return false;
+  }
+
+  const resolvedStorage = path.resolve(STORAGE_DIR);
+  const resolvedUploads = path.resolve(UPLOADS_DIR);
+  const resolvedPreviews = path.resolve(PREVIEWS_DIR);
+  const absPath = path.resolve(resolvedStorage, trimmed);
+
+  const insideUploads = absPath.startsWith(resolvedUploads + path.sep);
+  const insidePreviews = absPath.startsWith(resolvedPreviews + path.sep);
+  if (!insideUploads && !insidePreviews) {
+    return false;
+  }
+
+  try {
+    fs.unlinkSync(absPath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return false;
+    }
+    throw err;
+  }
+}
+
+export function deleteItemImageFiles(
+  imagePath?: string | null,
+  blurredImagePath?: string | null
+): number {
+  let removed = 0;
+  if (deleteStoredImageFile(imagePath)) removed += 1;
+  if (deleteStoredImageFile(blurredImagePath)) removed += 1;
+  return removed;
+}
+
